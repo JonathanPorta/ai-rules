@@ -37,6 +37,15 @@ if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   exit 1
 fi
 
+# Check that git subtree is available
+if ! git subtree -h > /dev/null 2>&1; then
+  error "'git subtree' is not available on this system."
+  error "On Debian/Ubuntu: sudo apt-get install git-subtree"
+  error "On macOS: it is included with git from Homebrew (brew install git)"
+  error "On other systems: check your git installation or install git-subtree separately."
+  exit 1
+fi
+
 # Must be at repo root (subtree requires it)
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 if [[ "$PWD" != "$REPO_ROOT" ]]; then
