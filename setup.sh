@@ -21,6 +21,7 @@ REFERENCE_MARKER="# ai-rules-reference"
 SUPPORTED_PLATFORMS="claude,cursor,windsurf,copilot,amp"
 
 usage() {
+  local exit_code="${1:-0}"
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
@@ -38,7 +39,7 @@ Examples:
   $(basename "$0") --platforms all
   $(basename "$0") --list
 EOF
-  exit 0
+  exit "$exit_code"
 }
 
 list_platforms() {
@@ -56,11 +57,16 @@ PLATFORMS=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --platforms) PLATFORMS="$2"; shift 2 ;;
+    --platforms)
+      if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "Error: --platforms requires a value." >&2
+        usage 1
+      fi
+      PLATFORMS="$2"; shift 2 ;;
     --list) list_platforms ;;
     --dry-run) DRY_RUN=true; shift ;;
-    -h|--help) usage ;;
-    *) echo "Unknown option: $1"; usage ;;
+    -h|--help) usage 0 ;;
+    *) echo "Unknown option: $1" >&2; usage 1 ;;
   esac
 done
 
