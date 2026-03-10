@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -74,13 +78,23 @@ jobs:
 
       - name: Create tag
         run: |
-          git tag "${{ steps.version.outputs.new_tag }}"
-          git push origin "${{ steps.version.outputs.new_tag }}"
+          NEW_TAG="${{ steps.version.outputs.new_tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${NEW_TAG}" &>/dev/null; then
+            echo "Tag ${NEW_TAG} already exists on remote — skipping tag creation."
+          else
+            git tag "$NEW_TAG"
+            git push origin "$NEW_TAG"
+          fi
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ steps.version.outputs.new_tag }}" \
-            --title "${{ steps.version.outputs.new_tag }}" \
-            --generate-notes
+          NEW_TAG="${{ steps.version.outputs.new_tag }}"
+          if gh release view "$NEW_TAG" &>/dev/null; then
+            echo "Release ${NEW_TAG} already exists — skipping release creation."
+          else
+            gh release create "$NEW_TAG" \
+              --title "$NEW_TAG" \
+              --generate-notes
+          fi
