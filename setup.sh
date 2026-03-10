@@ -98,7 +98,7 @@ write_stub() {
   fi
 
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  [dry-run] would create/update $file"
+    echo "  [dry-run] would create/update $file ($platform)"
     return
   fi
 
