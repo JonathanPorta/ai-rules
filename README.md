@@ -1,11 +1,12 @@
 # ai-rules
 
-Structured rules for AI-assisted feature development. Forces acceptance criteria,
-validation-before-implementation, and human gates at critical decision points.
+Structured rules for AI-assisted development. Forces codebase understanding,
+acceptance criteria, validation-before-implementation, and human gates at
+critical decision points.
 
 ## The Problem
 
-AI coding agents will happily generate code without a clear definition of "done",
+AI coding agents will happily generate code without understanding the codebase,
 skip validation, and mark their own work complete. This leads to features that
 compile but don't work, tasks that are checked off but not verified, and scope
 that silently drifts.
@@ -14,114 +15,136 @@ that silently drifts.
 
 A set of mandatory rules that enforce:
 
-1. **Human-approved acceptance criteria** before any code is written
-2. **AI-generated validation steps** before each task is implemented
-3. **Observable proof** of task completion (not self-assessment)
-4. **Human gates** at critical decision points
+1. **Codebase analysis before proposals** — AI must document its understanding and get human confirmation
+2. **Human-approved acceptance criteria** before any code is written
+3. **AI-generated validation steps** before each task is implemented
+4. **Observable proof** of task completion (not self-assessment)
+5. **Human gates** at critical decision points
+6. **Phased project planning** for multi-feature initiatives
 
-## Quick Start
+## Install
 
-### Option 1: Git Subtree (recommended for shared projects)
+### One-liner (recommended)
 
 ```bash
-# Add as a subtree
-git subtree add --prefix=.ai-rules https://github.com/portaj/ai-rules.git main --squash
-
-# Update later
-git subtree pull --prefix=.ai-rules https://github.com/portaj/ai-rules.git main --squash
+curl -fsSL https://raw.githubusercontent.com/portaj/ai-rules/main/install.sh | bash
 ```
 
-### Option 2: Git Submodule
+This will:
+- **Fresh install:** `git subtree add` the latest release to `.ai-rules/`
+- **Update:** `git subtree pull` to the latest release if already installed
+- **Abort:** warn and exit if `.ai-rules/` exists but wasn't installed by this script
+
+### Manual: Git Subtree
+
+```bash
+# Add as a subtree (pin to a release tag)
+git subtree add --prefix=.ai-rules https://github.com/portaj/ai-rules.git v1.0.0 --squash
+
+# Update later
+git subtree pull --prefix=.ai-rules https://github.com/portaj/ai-rules.git v1.2.0 --squash
+```
+
+### Manual: Git Submodule
 
 ```bash
 git submodule add https://github.com/portaj/ai-rules.git .ai-rules
 ```
 
-### Option 3: Just copy it
+### Manual: Just copy it
 
 ```bash
 cp -r ai-rules/ /path/to/your/project/.ai-rules/
 ```
 
-## Platform Wiring
+## Platform Setup
 
-After adding the rules to your project, wire them into your AI tool:
+After installing, generate platform-specific config stubs:
 
-### Claude Code
+```bash
+# Wire up for specific platforms
+.ai-rules/setup.sh --platforms cursor,windsurf,copilot
 
-Claude Code auto-discovers `AGENTS.md` files in subdirectories. No additional
-configuration needed. The rules in `.ai-rules/AGENTS.md` will be automatically
-loaded.
+# Wire up for all supported platforms
+.ai-rules/setup.sh --platforms all
 
-### Cursor
-
-Add a rule file at `.cursor/rules/ai-rules.md`:
-
-```markdown
-Read and follow all rules in `.ai-rules/AGENTS.md` and the files it references
-before beginning any feature work.
+# See what's supported
+.ai-rules/setup.sh --list
 ```
 
-Or reference it in `.cursorrules`:
+The setup script creates thin stub files at each platform's expected config
+location (e.g., `.cursorrules`, `.windsurfrules`). These stubs reference
+`.ai-rules/AGENTS.md` and leave room for project-specific additions.
 
-```
-@file .ai-rules/AGENTS.md
-```
+### Platform Details
 
-### Windsurf
-
-Add to `.windsurfrules`:
-
-```
-Before starting any feature work, read and follow the rules defined in
-.ai-rules/AGENTS.md and all referenced rule files in .ai-rules/rules/.
-```
-
-### GitHub Copilot
-
-Add to `.github/copilot-instructions.md`:
-
-```markdown
-## Development Rules
-
-Follow the AI development rules defined in `.ai-rules/AGENTS.md`.
-Read all referenced rule files before beginning feature work.
-```
-
-### Amp / Other Agents
-
-Most agents accept a system prompt or project instructions file. Point them at:
-
-```
-.ai-rules/AGENTS.md
-```
+| Platform | Config Location | Auto-discovers? |
+|----------|----------------|-----------------|
+| Claude Code | `.ai-rules/AGENTS.md` | Yes — no stub needed |
+| Cursor | `.cursorrules` | No — stub created by setup.sh |
+| Windsurf | `.windsurfrules` | No — stub created by setup.sh |
+| GitHub Copilot | `.github/copilot-instructions.md` | No — stub created by setup.sh |
+| Amp | `.amp/rules/ai-rules.md` | No — stub created by setup.sh |
 
 ## Structure
 
 ```
 .ai-rules/
-  AGENTS.md                      # Entry point and core principles
+  .version                         # Origin and version tracking
+  AGENTS.md                        # Entry point and core principles
+  setup.sh                         # Platform stub generator
+  install.sh                       # curl|bash installer
   rules/
-    01-workflow-overview.md       # End-to-end process with human gates
-    02-prd.md                     # PRD generation and acceptance criteria
-    03-task-generation.md         # Task decomposition with validation criteria
-    04-validation-first.md        # Write validation before implementation
-    05-task-execution.md          # Execute tasks, track progress, verify completion
+    00-project-planning.md         # Phased planning for multi-feature projects
+    01-workflow-overview.md         # End-to-end process with human gates
+    02-prd.md                      # Codebase analysis, PRD generation, acceptance criteria
+    03-task-generation.md          # Task decomposition with validation criteria
+    04-validation-first.md         # Write validation before implementation
+    05-task-execution.md           # Execute tasks, track progress, verify completion
   templates/
-    prd.md                        # Blank PRD template
-    tasks.md                      # Blank task list template
+    project-plan.md                # Blank project plan template
+    prd.md                         # Blank PRD template
+    tasks.md                       # Blank task list template
 ```
 
-## The Two Types of Criteria
+## How It Works
 
-| | Acceptance Criteria | Validation Criteria |
-|---|---|---|
-| **Owner** | Human | AI |
-| **When defined** | PRD phase (before tasks) | Pre-implementation (per task) |
-| **What it answers** | "What does done mean?" | "How do we prove this task got us there?" |
-| **Approval** | Required before any work | Human reviews if desired |
-| **Granularity** | Feature-level | Task-level |
-| **Mutability** | Only changed with human approval | AI can refine as understanding deepens |
+### Single Feature Workflow
+
+```
+Feature Request
+  → Codebase Analysis (AI writes, human reviews)     ← GATE
+  → PRD with Acceptance Criteria (human approves)     ← GATE
+  → Task Decomposition (human confirms parent tasks)  ← GATE
+  → For each task:
+      → Validation plan (AI writes before coding)
+      → Implementation
+      → Validation execution (pass/fail reported)
+  → Feature Verification (human confirms ACs met)     ← GATE
+```
+
+### Multi-Feature Project Workflow
+
+```
+Project Vision
+  → Project Brief (human approves)                    ← GATE
+  → Phased Plan with Dependencies (human approves)    ← GATE
+  → For each phase:
+      → PRDs for each feature (single feature workflow above)
+      → Phase Gate Review (human confirms exit criteria)  ← GATE
+  → Project Completion Summary
+```
+
+## The Three Types of Criteria
+
+| | Acceptance Criteria | Validation Criteria | Exit Criteria |
+|---|---|---|---|
+| **Owner** | Human | AI | Human + AI |
+| **Scope** | Feature-level | Task-level | Phase-level |
+| **When defined** | PRD phase | Pre-implementation | Project planning |
+| **What it answers** | "What does done mean?" | "How do we prove this task got us there?" | "What must be true to move to the next phase?" |
+| **Approval** | Required before any work | Human reviews if desired | Required before next phase |
+| **Mutability** | Only with human approval | AI refines as needed | Only with human approval |
 
 ## Extending for Your Organization
 
@@ -135,6 +158,16 @@ These rules are intentionally generic. Fork this repo to add:
 
 Keep extensions in a separate file (e.g., `rules/06-org-standards.md`) and
 reference it from your fork's `AGENTS.md`.
+
+## Versioning
+
+Releases are cut automatically on merge to `main`:
+- `BREAKING` or `major:` in commit message → major bump
+- `feat:` or `minor:` → minor bump
+- Everything else → patch bump
+
+The `.version` file tracks the installed version and origin, used by the
+installer to detect updates.
 
 ## License
 

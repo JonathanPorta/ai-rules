@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version bump
+        id: version
+        run: |
+          # Get the latest tag, or default to v0.0.0
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "latest_tag=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
+
+          # Parse current version
+          VERSION="${LATEST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          # Determine bump from commit messages since last tag
+          if [[ "$LATEST_TAG" == "v0.0.0" ]]; then
+            COMMITS=$(git log --oneline)
+          else
+            COMMITS=$(git log "${LATEST_TAG}..HEAD" --oneline)
+          fi
+
+          if echo "$COMMITS" | grep -qiE '(BREAKING|major:)'; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif echo "$COMMITS" | grep -qiE '(feat:|minor:)'; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Bumping ${LATEST_TAG} → ${NEW_TAG}"
+
+      - name: Update .version file
+        run: |
+          cat > .version <<EOF
+          origin=https://github.com/${{ github.repository }}
+          tag=${{ steps.version.outputs.new_tag }}
+          EOF
+          # Clean up leading whitespace from heredoc
+          sed -i 's/^[[:space:]]*//' .version
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add .version
+          if git diff --cached --quiet; then
+            echo "No changes to .version — skipping commit"
+          else
+            git commit -m "chore: bump version to ${{ steps.version.outputs.new_tag }}"
+            git push
+          fi
+
+      - name: Create tag
+        run: |
+          git tag "${{ steps.version.outputs.new_tag }}"
+          git push origin "${{ steps.version.outputs.new_tag }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.new_tag }}" \
+            --title "${{ steps.version.outputs.new_tag }}" \
+            --generate-notes
