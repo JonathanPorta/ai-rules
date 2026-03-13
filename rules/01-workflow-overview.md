@@ -2,17 +2,38 @@
 
 Every feature follows this sequence. No steps are optional.
 
+## Scope Check
+
+Before starting, determine the scope of the work:
+
+- **Multi-feature project** (new product, major initiative, multiple workstreams):
+  Start with [00-project-planning.md](00-project-planning.md) to create a phased
+  project plan BEFORE generating any PRDs.
+- **Single feature** (one feature, bug fix, improvement): Proceed directly to
+  Phase 1 below.
+
+When in doubt, ask the human:
+
+> "This looks like it could involve multiple features. Should we create a phased
+> project plan, or treat this as a single feature?"
+
 ## Phases
 
 ### Phase 1: PRD (Human + AI)
 
 1. Human provides a feature request, bug report, or improvement idea (any level of detail).
-2. AI generates a PRD following [02-prd.md](02-prd.md).
-3. AI presents clarifying questions with lettered options for quick response.
-4. **Human reviews and approves acceptance criteria.** &larr; GATE
-5. PRD is saved to `tasks/prd-<feature-name>.md`.
+2. AI explores the codebase and produces a **Codebase Analysis** (see [02-prd.md](02-prd.md)).
+3. **Human reviews the codebase analysis** for misunderstandings. &larr; GATE
+4. AI asks clarifying questions with lettered options for quick response.
+5. AI generates the PRD following [02-prd.md](02-prd.md).
+6. **Human reviews and approves acceptance criteria.** &larr; GATE
+7. PRD is saved to `tasks/prd-<feature-name>.md`.
 
-> **Why this gate exists:** Acceptance criteria are the contract. Everything
+> **Why the analysis gate exists:** If the AI misunderstands the codebase, every
+> downstream artifact — PRD, tasks, implementation — will be wrong. Catching
+> misunderstandings here costs seconds. Catching them in implementation costs hours.
+
+> **Why the AC gate exists:** Acceptance criteria are the contract. Everything
 > downstream — tasks, validation, implementation — flows from them. Getting them
 > wrong here means building the wrong thing efficiently.
 
@@ -53,21 +74,41 @@ For EACH task:
 
 | Gate | Phase | Who Approves | What's Approved |
 |------|-------|-------------|-----------------|
-| 1 | PRD | Human | Acceptance criteria |
-| 2 | Task Decomposition | Human | Parent task breakdown |
-| 3 | Feature Verification | Human | AC met with evidence |
+| 0 | Project Planning | Human | Phased plan and dependencies (multi-feature only) |
+| 1 | PRD | Human | Codebase analysis accuracy |
+| 2 | PRD | Human | Acceptance criteria |
+| 3 | Task Decomposition | Human | Parent task breakdown |
+| 4 | Feature Verification | Human | AC met with evidence |
+| 5 | Phase Gate | Human | Phase exit criteria met (multi-feature only) |
 
 **Optional gate:** Per-task validation plan review (Phase 3, step 2). The human
 can opt into auto-proceed to skip this for trusted workflows.
 
 ## File Organization
 
-All artifacts are stored in a `tasks/` directory at the project root:
+All artifacts are stored in a `tasks/` directory at the project root.
+
+### Single Feature
 
 ```
 tasks/
   prd-<feature-name>.md
   tasks-<feature-name>.md
+```
+
+### Multi-Feature Project
+
+```
+tasks/
+  project-plan.md
+  phase-1/
+    prd-<feature-a>.md
+    tasks-<feature-a>.md
+    prd-<feature-b>.md
+    tasks-<feature-b>.md
+  phase-2/
+    prd-<feature-c>.md
+    tasks-<feature-c>.md
 ```
 
 Use kebab-case for feature names. If the feature request is "Add user profile editing",

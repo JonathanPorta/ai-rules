@@ -9,9 +9,19 @@ When a human provides a feature request, bug report, or improvement idea.
 1. **Analyze the request.** Identify what is being asked, who it is for, and why
    it matters.
 
-2. **Read the codebase.** Before writing anything, explore the relevant parts of
-   the project to understand existing architecture, patterns, conventions, and
-   dependencies. List what you examined in the PRD's "Background" section.
+2. **Explore the codebase and produce a Codebase Analysis.** Before writing
+   anything, read the relevant parts of the project. Produce a structured
+   **Codebase Analysis** artifact (see format below) documenting what you found.
+   Present it to the human and ask:
+
+   > "Here is my understanding of the relevant codebase. Are there any
+   > misunderstandings or areas I missed before I proceed?"
+
+   **Wait for the human to confirm the analysis is accurate.** ← GATE
+
+   This is the highest-leverage checkpoint in the entire workflow. Every
+   downstream artifact depends on the AI's understanding of the codebase being
+   correct. A misunderstanding caught here saves hours of wasted implementation.
 
 3. **Ask clarifying questions.** Present 3-8 questions with lettered options
    (A/B/C/D) for quick response. Always include an open-ended option per question.
@@ -42,6 +52,48 @@ When a human provides a feature request, bug report, or improvement idea.
 6. **Wait for approval.** Do not proceed to task generation until the human
    explicitly approves the acceptance criteria.
 
+## Codebase Analysis Format
+
+The codebase analysis is a mandatory artifact produced BEFORE the PRD. It is
+embedded in the PRD's "Codebase Analysis" section and also presented standalone
+for human review.
+
+```markdown
+## Codebase Analysis: <Feature Area>
+
+### Explored
+- `src/api/` — REST layer, Express-based, middleware pattern for auth
+- `src/db/schema.ts` — Drizzle ORM, 12 tables, users table has no `bio` column
+- `src/components/` — React, no form library, hand-rolled validation
+- `package.json` — Jest configured, 85% coverage threshold
+
+### Relevant Patterns
+- API routes follow `src/api/<resource>.ts` convention
+- Validation is inline (no shared validation utilities)
+- Auth middleware at `src/middleware/auth.ts` checks JWT
+- Tests co-located with source files (`*.test.ts` alongside `*.ts`)
+
+### Constraints Discovered
+- No database migration tooling — schema changes require manual SQL
+- `src/api/users.ts` is 580 lines, already complex — adding here increases risk
+- Rate limiting is global, not per-endpoint
+
+### Assumptions (need human confirmation)
+- The existing inline validation pattern should be followed (vs. introducing Zod)
+- No breaking API changes allowed (existing mobile clients consume this)
+- The `users` table can be altered directly (no shared ownership with other teams)
+```
+
+### Rules for the Codebase Analysis
+
+- **List what you actually read.** File paths, not vague references.
+- **Surface constraints.** Missing tooling, large files, shared ownership,
+  undocumented dependencies — anything that will affect implementation.
+- **State assumptions explicitly.** If you are making a judgment call about how
+  something works, flag it so the human can correct you.
+- **Keep it short.** One line per finding. The goal is fast human review, not
+  comprehensive documentation.
+
 ## PRD Structure
 
 ```markdown
@@ -49,6 +101,9 @@ When a human provides a feature request, bug report, or improvement idea.
 
 ## Summary
 One paragraph. What is being built and why.
+
+## Codebase Analysis
+<!-- Embed the codebase analysis produced in Step 2 here. -->
 
 ## Background
 What exists today. What is wrong or missing. Reference specific files, modules,
