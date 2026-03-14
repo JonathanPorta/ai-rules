@@ -65,7 +65,11 @@ if [[ "$PWD" != "$REPO_ROOT" ]]; then
 fi
 
 # Check for uncommitted changes (subtree needs a clean working tree)
-if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+if ! git rev-parse HEAD &>/dev/null; then
+  error "Repository has no commits. Create an initial commit before installing."
+  exit 1
+fi
+if ! git diff-index --quiet HEAD --; then
   error "You have uncommitted changes. Commit or stash them before installing."
   exit 1
 fi
