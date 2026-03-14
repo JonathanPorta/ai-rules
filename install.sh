@@ -43,18 +43,18 @@ if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   exit 1
 fi
 
-# Must have git subtree available
-# git subtree is a contrib script, not a binary — 'command -v' won't find it.
-# The only reliable check is to invoke it and see if git recognizes the command.
-if ! git subtree --help &>/dev/null 2>&1; then
-  # Some git builds output help to stderr, try one more way
-  if ! git subtree 2>&1 | grep -q 'usage:'; then
-    error "'git subtree' is not available on this system."
-    error "On Debian/Ubuntu: sudo apt-get install git-subtree"
-    error "On macOS: it is included with git from Homebrew (brew install git)"
-    error "On other systems: check your git installation or install git-subtree separately."
-    exit 1
-  fi
+# Must have git subtree available.
+# git subtree is a contrib shell script, not a binary — 'command -v git-subtree'
+# won't find it. Invoking 'git subtree' with no args prints usage to stdout
+# but exits non-zero, so we check if the output contains 'usage' regardless of
+# exit code.
+SUBTREE_CHECK=$(git subtree 2>&1 || true)
+if ! echo "$SUBTREE_CHECK" | grep -qi 'usage'; then
+  error "'git subtree' is not available on this system."
+  error "On Debian/Ubuntu: sudo apt-get install git-subtree"
+  error "On macOS: it is included with git from Homebrew (brew install git)"
+  error "On other systems: check your git installation or install git-subtree separately."
+  exit 1
 fi
 
 # Must be at repo root (subtree requires it)
