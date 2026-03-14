@@ -56,8 +56,13 @@ For EACH task:
 2. AI presents validation steps to the human (unless human has opted into auto-proceed).
 3. AI implements the task per [05-task-execution.md](05-task-execution.md).
 4. AI executes validation steps and reports results.
-5. On pass: check off task, proceed to next.
+5. On pass: check off task, update session state, proceed to next.
 6. On fail: stop, report, wait for guidance.
+
+**Session state:** The AI maintains a session state file throughout this phase
+(see [06-session-state.md](06-session-state.md)). This file persists decisions,
+codebase learnings, and current position so that context loss does not require
+re-exploration. Updated after each parent task and after any human decision.
 
 ### Phase 4: Feature Verification (Human)
 
@@ -94,6 +99,7 @@ All artifacts are stored in a `tasks/` directory at the project root.
 tasks/
   prd-<feature-name>.md
   tasks-<feature-name>.md
+  session-state-<feature-name>.md
 ```
 
 ### Multi-Feature Project
@@ -104,11 +110,14 @@ tasks/
   phase-1/
     prd-<feature-a>.md
     tasks-<feature-a>.md
+    session-state-<feature-a>.md
     prd-<feature-b>.md
     tasks-<feature-b>.md
+    session-state-<feature-b>.md
   phase-2/
     prd-<feature-c>.md
     tasks-<feature-c>.md
+    session-state-<feature-c>.md
 ```
 
 Use kebab-case for feature names. If the feature request is "Add user profile editing",

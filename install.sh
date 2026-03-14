@@ -31,10 +31,30 @@ error() { echo -e "${RED}[ai-rules]${NC} $*" >&2; }
 # Preflight checks
 # -------------------------------------------------------------------
 
+# Must have git
+if ! command -v git &>/dev/null; then
+  error "git is not installed."
+  exit 1
+fi
+
 # Must be in a git repo
 if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   error "Not inside a git repository. Run this from your project root."
   exit 1
+fi
+
+# Must have git subtree available
+# git subtree is a contrib script, not a binary — 'command -v' won't find it.
+# The only reliable check is to invoke it and see if git recognizes the command.
+if ! git subtree --help &>/dev/null 2>&1; then
+  # Some git builds output help to stderr, try one more way
+  if ! git subtree 2>&1 | grep -q 'usage:'; then
+    error "'git subtree' is not available on this system."
+    error "On Debian/Ubuntu: sudo apt-get install git-subtree"
+    error "On macOS: it is included with git from Homebrew (brew install git)"
+    error "On other systems: check your git installation or install git-subtree separately."
+    exit 1
+  fi
 fi
 
 # Must be at repo root (subtree requires it)

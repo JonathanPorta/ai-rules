@@ -21,6 +21,7 @@ A set of mandatory rules that enforce:
 4. **Observable proof** of task completion (not self-assessment)
 5. **Human gates** at critical decision points
 6. **Phased project planning** for multi-feature initiatives
+7. **Session state persistence** so context loss doesn't mean knowledge loss
 
 ## Install
 
@@ -101,10 +102,15 @@ location (e.g., `.cursorrules`, `.windsurfrules`). These stubs reference
     03-task-generation.md          # Task decomposition with validation criteria
     04-validation-first.md         # Write validation before implementation
     05-task-execution.md           # Execute tasks, track progress, verify completion
+    06-session-state.md            # Persist context across sessions
+    07-tdd-enforcement.md          # (Optional) Red-then-green TDD evidence
+  scripts/
+    tdd-check.sh                   # (Optional) Git timestamp TDD verifier
   templates/
     project-plan.md                # Blank project plan template
     prd.md                         # Blank PRD template
     tasks.md                       # Blank task list template
+    session-state.md               # Blank session state template
 ```
 
 ## How It Works
@@ -145,6 +151,19 @@ Project Vision
 | **What it answers** | "What does done mean?" | "How do we prove this task got us there?" | "What must be true to move to the next phase?" |
 | **Approval** | Required before any work | Human reviews if desired | Required before next phase |
 | **Mutability** | Only with human approval | AI refines as needed | Only with human approval |
+
+## Optional Rules
+
+Some rules are opt-in. They live in the repo but are disabled by default.
+To enable an optional rule, edit `AGENTS.md` and move it from the "Available"
+list to the "Enabled" list under the Optional Rules section.
+
+| Rule | What It Does | Enable When |
+|------|-------------|-------------|
+| [TDD Enforcement](rules/07-tdd-enforcement.md) | Requires red-then-green test evidence | Your team practices TDD and has test infrastructure |
+
+Optional rules also come with supporting tooling in `scripts/`:
+- `tdd-check.sh` — compares git timestamps to verify test-before-implementation ordering
 
 ## Extending for Your Organization
 
