@@ -31,14 +31,25 @@ error() { echo -e "${RED}[ai-rules]${NC} $*" >&2; }
 # Preflight checks
 # -------------------------------------------------------------------
 
+# Must have git
+if ! command -v git &>/dev/null; then
+  error "git is not installed."
+  exit 1
+fi
+
 # Must be in a git repo
 if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   error "Not inside a git repository. Run this from your project root."
   exit 1
 fi
 
-# Check that git subtree is available
-if ! git subtree -h > /dev/null 2>&1; then
+# Must have git subtree available.
+# git subtree is a contrib shell script, not a binary — 'command -v git-subtree'
+# won't find it. Invoking 'git subtree' with no args prints usage to stdout
+# but exits non-zero, so we check if the output contains 'usage' regardless of
+# exit code.
+SUBTREE_CHECK=$(git subtree 2>&1 || true)
+if ! echo "$SUBTREE_CHECK" | grep -qi 'usage'; then
   error "'git subtree' is not available on this system."
   error "On Debian/Ubuntu: sudo apt-get install git-subtree"
   error "On macOS: it is included with git from Homebrew (brew install git)"

@@ -10,15 +10,17 @@ are explicitly marked as independent and have no shared file modifications.
 For each task, follow this sequence:
 
 1. Read the task description and its validation criteria.
-2. Write the validation plan (per [04-validation-first.md](04-validation-first.md)).
-3. Present the validation plan (unless auto-proceed is enabled).
-4. Write failing tests (if applicable).
-5. Implement the task.
-6. Run all validation steps.
-7. Report validation results.
-8. On all-pass: mark the task `[x]` in the task file, proceed.
-9. On any-fail: fix and re-validate. Do NOT mark complete.
-10. Commit with a meaningful message referencing the task number.
+2. Read the session state file (if resuming — see [06-session-state.md](06-session-state.md)).
+3. Write the validation plan (per [04-validation-first.md](04-validation-first.md)).
+4. Present the validation plan (unless auto-proceed is enabled).
+5. Write failing tests (if applicable).
+6. Implement the task.
+7. Run all validation steps.
+8. Report validation results.
+9. On all-pass: mark the task `[x]` in the task file, proceed.
+10. On any-fail: fix and re-validate. Do NOT mark complete.
+11. Update the session state file (current position, decisions, learnings).
+12. Commit with a meaningful message referencing the task number.
 
 ## Progress Tracking
 
@@ -27,19 +29,30 @@ Update the task markdown file as you complete each sub-task. Do not batch
 checkbox updates. Mark each sub-task as you finish it.
 
 ### Stopping mid-feature
-If you must stop before completing all tasks, add a status block at the top of
-the task file:
+If you must stop before completing all tasks:
+
+1. Update the session state file with a detailed "What's Next" section
+   (see [06-session-state.md](06-session-state.md)).
+2. Add a brief status block at the top of the task file:
 
 ```markdown
 ## Current Status
 **Stopped after:** Task 2.3
 **Reason:** [why you stopped]
-**Next step:** [what to do when resuming]
-**Known issues:** [anything broken or incomplete]
+**Session state:** session-state-<feature-name>.md has full context
 ```
 
+### Resuming work
+When picking up a feature after a break or context loss, read files in this
+order:
+1. `session-state-<feature>.md` — where you are, what you know
+2. `tasks-<feature>.md` — what's done, what's left
+3. `prd-<feature>.md` — acceptance criteria and codebase analysis
+4. Only then start reading implementation files
+
 ### Task file is source of truth
-The task markdown file is the canonical record of progress. Keep it accurate.
+The task markdown file is the canonical record of progress. The session state
+file is the canonical record of context. Keep both accurate.
 
 ## Scope Discipline
 
