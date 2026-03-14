@@ -4,7 +4,7 @@ set -euo pipefail
 # install.sh — Install or update ai-rules via git subtree
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/portaj/ai-rules/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/JonathanPorta/ai-rules/main/install.sh | bash
 #
 # What it does:
 #   - If .ai-rules/ doesn't exist: git subtree add from latest release tag
@@ -12,9 +12,9 @@ set -euo pipefail
 #   - If .ai-rules/ exists but isn't ours: abort with warning
 #
 
-REPO="https://github.com/portaj/ai-rules.git"
-REPO_API="https://api.github.com/repos/portaj/ai-rules/releases/latest"
-ORIGIN_URL="https://github.com/portaj/ai-rules"
+REPO="https://github.com/JonathanPorta/ai-rules.git"
+REPO_API="https://api.github.com/repos/JonathanPorta/ai-rules/releases/latest"
+ORIGIN_URL="https://github.com/JonathanPorta/ai-rules"
 PREFIX=".ai-rules"
 VERSION_FILE="${PREFIX}/.version"
 
