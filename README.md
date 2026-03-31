@@ -28,7 +28,7 @@ A set of mandatory rules that enforce:
 ### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/portaj/ai-rules/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/JonathanPorta/ai-rules/main/install.sh | bash
 ```
 
 This will:
@@ -40,10 +40,10 @@ This will:
 
 ```bash
 # Add as a subtree (pin to a release tag)
-git subtree add --prefix=.ai-rules https://github.com/portaj/ai-rules.git v1.0.0 --squash
+git subtree add --prefix=.ai-rules https://github.com/JonathanPorta/ai-rules.git v1.0.0 --squash
 
 # Update later
-git subtree pull --prefix=.ai-rules https://github.com/portaj/ai-rules.git v1.2.0 --squash
+git subtree pull --prefix=.ai-rules https://github.com/JonathanPorta/ai-rules.git v1.2.0 --squash
 ```
 
 ### Manual: Git Submodule
@@ -87,6 +87,30 @@ location (e.g., `.cursorrules`, `.windsurfrules`). These stubs reference
 | GitHub Copilot | `.github/copilot-instructions.md` | No — stub created by setup.sh |
 | Amp | `.amp/rules/ai-rules.md` | No — stub created by setup.sh |
 
+## Custom Agents (GitHub Copilot)
+
+The `agents/` directory contains pre-built agent definitions for use with
+[GitHub Copilot coding agent](https://docs.github.com/en/copilot/reference/custom-agents-configuration).
+When you run `setup.sh --platforms copilot`, these agents are copied to
+`.github/agents/` in your project.
+
+| Agent | Tools | Purpose |
+|-------|-------|---------|
+| [planner](agents/planner.md) | read, search | Explores the codebase, produces analysis, and generates PRDs with acceptance criteria. Does not write code. |
+| [implementer](agents/implementer.md) | read, search, edit, execute | Decomposes approved PRDs into tasks and implements them using validation-first development. |
+| [reviewer](agents/reviewer.md) | read, search, execute | Reviews completed work against acceptance criteria and produces verification evidence tables. |
+
+These agents divide the ai-rules workflow into distinct roles with appropriate
+tool access:
+
+- **planner** handles Phases 1–2 (PRD and task generation). Limited to read-only
+  tools to enforce human gates before any code is written.
+- **implementer** handles Phase 3 (validation-first implementation). Has full
+  tool access to write tests, implement features, and run validation.
+- **reviewer** handles Phase 4 (feature verification). Has execute access to
+  run tests independently but cannot modify code — enforcing separation between
+  implementation and review.
+
 ## Structure
 
 ```
@@ -104,6 +128,10 @@ location (e.g., `.cursorrules`, `.windsurfrules`). These stubs reference
     05-task-execution.md           # Execute tasks, track progress, verify completion
     06-session-state.md            # Persist context across sessions
     07-tdd-enforcement.md          # (Optional) Red-then-green TDD evidence
+  agents/
+    planner.md                     # PRD and project planning agent
+    implementer.md                 # Validation-first task implementation agent
+    reviewer.md                    # Feature verification and AC review agent
   scripts/
     tdd-check.sh                   # (Optional) Git timestamp TDD verifier
   templates/

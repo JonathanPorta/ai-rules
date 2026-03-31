@@ -47,7 +47,7 @@ list_platforms() {
   echo "  claude     - Claude Code (auto-discovers AGENTS.md, stub optional)"
   echo "  cursor     - Cursor (.cursorrules)"
   echo "  windsurf   - Windsurf (.windsurfrules)"
-  echo "  copilot    - GitHub Copilot (.github/copilot-instructions.md)"
+  echo "  copilot    - GitHub Copilot (.github/copilot-instructions.md + .github/agents/)"
   echo "  amp        - Amp (.amp/rules/ai-rules.md)"
   exit 0
 }
@@ -160,6 +160,27 @@ Read all referenced rule files before beginning feature work.
 
 <!-- Project-specific Copilot instructions below this line -->"
       write_stub "$PROJECT_ROOT/.github/copilot-instructions.md" "$STUB" "copilot"
+
+      # Copy custom agent definitions for Copilot coding agent
+      AGENTS_SRC="${SCRIPT_DIR}/agents"
+      AGENTS_DEST="${PROJECT_ROOT}/.github/agents"
+      if [[ -d "$AGENTS_SRC" ]]; then
+        if [[ "$DRY_RUN" == true ]]; then
+          echo "  [dry-run] would copy agents from ${RULES_REL}/agents/ to .github/agents/"
+        else
+          [[ -d "$AGENTS_DEST" ]] || mkdir -p "$AGENTS_DEST"
+          for agent_file in "$AGENTS_SRC"/*.md; do
+            [[ -f "$agent_file" ]] || continue
+            dest_file="${AGENTS_DEST}/$(basename "$agent_file")"
+            if [[ -f "$dest_file" ]]; then
+              echo "  [skip] .github/agents/$(basename "$agent_file") — already exists"
+            else
+              cp "$agent_file" "$dest_file"
+              echo "  [create] .github/agents/$(basename "$agent_file")"
+            fi
+          done
+        fi
+      fi
       ;;
     amp)
       echo "Amp:"
