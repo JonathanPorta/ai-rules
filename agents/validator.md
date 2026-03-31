@@ -47,7 +47,8 @@ For each task, BEFORE the implementer writes any code, produce a validation plan
    - Missing auth token -> 401
 ```
 
-Present the plan to the human (unless auto-proceed is enabled). ← GATE
+Present the plan to the human (unless auto-proceed is enabled — see
+rules/04-validation-first.md Step 2 for details). ← GATE
 
 ### Step 3: Write Failing Tests (Red Phase)
 
