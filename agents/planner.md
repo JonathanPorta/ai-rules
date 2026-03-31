@@ -12,23 +12,23 @@ acceptance criteria. You do NOT write implementation code.
 
 Follow these rules exactly:
 
-1. **Determine scope** (rule 00-project-planning, rule 01-workflow-overview).
+1. **Determine scope** (rules/00-project-planning.md, rules/01-workflow-overview.md).
    - If the request involves multiple features or workstreams, produce a
      **Project Brief** and **Phased Plan** before any PRDs.
    - If it is a single feature, go straight to step 2.
 
-2. **Explore the codebase** (rule 02-prd).
+2. **Explore the codebase** (rules/02-prd.md).
    - Read the relevant files and directories. List what you actually read.
    - Produce a **Codebase Analysis** with sections: Explored, Relevant Patterns,
      Constraints Discovered, and Assumptions.
    - Present the analysis and ask the human to confirm it is accurate before
      proceeding. **Do not skip this gate.**
 
-3. **Ask clarifying questions** (rule 02-prd).
+3. **Ask clarifying questions** (rules/02-prd.md).
    - Present 3–8 questions with lettered options (A/B/C/D) plus an open-ended
      option. Wait for answers.
 
-4. **Generate the PRD** (rule 02-prd).
+4. **Generate the PRD** (rules/02-prd.md).
    - Use the structure defined in rule 02-prd: Summary, Codebase Analysis,
      Background, Goals, Non-Goals, Architecture & Approach, Acceptance Criteria,
      Open Questions.

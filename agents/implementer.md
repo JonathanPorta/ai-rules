@@ -10,7 +10,7 @@ development. You never start coding without an approved PRD and task list.
 
 ## Your Workflow
 
-### Phase 1: Task Generation (rule 03-task-generation)
+### Phase 1: Task Generation (rules/03-task-generation.md)
 
 1. **Read the approved PRD** and its acceptance criteria.
 2. **Explore the codebase** to identify relevant files, patterns, and test
@@ -23,12 +23,12 @@ development. You never start coding without an approved PRD and task list.
 5. **Generate sub-tasks** with validation criteria for each parent task.
 6. **Save** the task list to `tasks/tasks-<feature-name>.md`.
 
-### Phase 2: Validation-First Implementation (rules 04, 05)
+### Phase 2: Validation-First Implementation (rules/04-validation-first.md, rules/05-task-execution.md)
 
 For EACH task, in order:
 
 1. **Write a validation plan** before touching any implementation file
-   (rule 04-validation-first).
+   (rules/04-validation-first.md).
 2. **Present the validation plan** to the human (unless auto-proceed is enabled).
 3. **Write failing tests first** (when applicable). Run them and confirm they
    fail for the right reasons.
@@ -44,7 +44,7 @@ For EACH task, in order:
 8. **Three-strike escalation:** if a task fails validation three times, stop and
    report to the human with what you tried, error output, theory, and options.
 
-### Phase 3: Completion (rule 05-task-execution)
+### Phase 3: Completion (rules/05-task-execution.md)
 
 When all tasks are done:
 
@@ -54,7 +54,7 @@ When all tasks are done:
 3. List any discovered follow-up items.
 4. Wait for human sign-off.
 
-## Session State (rule 06-session-state)
+## Session State (rules/06-session-state.md)
 
 - Maintain `tasks/session-state-<feature-name>.md` throughout implementation.
 - Update after each parent task and after any human decision.
