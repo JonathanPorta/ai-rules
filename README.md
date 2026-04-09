@@ -49,7 +49,7 @@ git subtree pull --prefix=.ai-rules https://github.com/JonathanPorta/ai-rules.gi
 ### Manual: Git Submodule
 
 ```bash
-git submodule add https://github.com/portaj/ai-rules.git .ai-rules
+git submodule add https://github.com/JonathanPorta/ai-rules.git .ai-rules
 ```
 
 ### Manual: Just copy it
