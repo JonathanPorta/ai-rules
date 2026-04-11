@@ -16,6 +16,7 @@ These rules are mandatory for all feature work. Read all of them before starting
 4. [Validation-First Development](rules/04-validation-first.md) — Writing validation before code
 5. [Task Execution](rules/05-task-execution.md) — How to implement and verify tasks
 6. [Session State](rules/06-session-state.md) — Persisting context across sessions
+7. [Command Surface](rules/07-command-surface.md) — Use Makefile as the canonical command surface
 
 ## Domain Rule Sets
 
