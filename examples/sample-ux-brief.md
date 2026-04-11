@@ -22,6 +22,15 @@ Users should feel informed, reassured, and in control.
 4. Inspect details before taking action
 5. Confirm cleanup and understand what changed
 
+## Success Criteria
+- Users can identify the largest storage categories within a few minutes of opening the app.
+- Users understand what will be removed before confirming cleanup.
+- Users feel confident completing a cleanup without fear of damaging their system.
+
+## Constraints
+- Must use plain, non-technical language for default explanations.
+- Must make destructive actions clearly reversible or explicitly confirmed.
+- Must work within normal desktop system permissions and performance limits.
 ## Risks
 - accidental destructive action
 - false confidence from oversimplified recommendations
