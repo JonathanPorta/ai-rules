@@ -22,6 +22,7 @@ For implementation work, load:
 - `rules/04-validation-first.md`
 - `rules/05-task-execution.md`
 - `rules/06-session-state.md`
+- `rules/07-command-surface.md`
 
 ## 3. Domain rules when relevant
 

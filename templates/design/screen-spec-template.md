@@ -28,7 +28,7 @@
 - default
 - loading
 - empty
-- error
+- failure
 - success
 
 ## Trust / Confirmation Notes
