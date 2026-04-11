@@ -28,16 +28,16 @@
 - single category failed
 - cleanup failed for one or more items
 
-### Recovery states
-- retry failed category
-- rescan machine
-- review skipped items
-
 ### Destructive / Confirmation states
 - confirm cleanup before removing selected files
 - warn when cleanup may remove items permanently
 - offer cancel path before destructive actions begin
 - confirm completion when cleanup cannot be undone
+
+### Recovery states
+- retry failed category
+- rescan machine
+- review skipped items
 
 ## Notes
 - indicate which cleanup actions are reversible vs permanent

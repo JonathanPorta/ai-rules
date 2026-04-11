@@ -25,12 +25,11 @@
 ## For critique of an existing product
 
 1. Use `templates/design/visual-audit-template.md`.
-2. Group observations by:
-   - orientation
-   - interaction model
-   - state handling
-   - trust and confirmation
-   - hierarchy and density
-   - accessibility and legibility
-3. Convert aesthetic observations into reusable rules.
-4. Record what should be copied, adapted, or explicitly avoided.
+2. Organize observations using the template sections:
+   - works well
+   - UX patterns
+   - UI patterns
+   - risks
+   - lessons
+   - copy / adapt / avoid
+3. Capture observations in the matching section so the audit follows the documented template.
