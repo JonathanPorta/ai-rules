@@ -2,7 +2,8 @@
 
 Structured rules for AI-assisted development. Forces codebase understanding,
 acceptance criteria, validation-before-implementation, and human gates at
-critical decision points.
+critical decision points. Includes a first-class design domain for user-facing
+UX/UI work.
 
 ## The Problem
 
@@ -10,6 +11,10 @@ AI coding agents will happily generate code without understanding the codebase,
 skip validation, and mark their own work complete. This leads to features that
 compile but don't work, tasks that are checked off but not verified, and scope
 that silently drifts.
+
+For user-facing work, the failure mode is different but just as expensive:
+agents optimize for a pretty hero screen, skip state design, ignore trust and
+error handling, and produce screens that look polished but fall apart in real use.
 
 ## The Solution
 
@@ -22,6 +27,26 @@ A set of mandatory rules that enforce:
 5. **Human gates** at critical decision points
 6. **Phased project planning** for multi-feature initiatives
 7. **Session state persistence** so context loss doesn't mean knowledge loss
+8. **Design workflow discipline** for user-facing UX/UI work: intent, journeys, states, trust, hierarchy, and critique
+
+## Design Domain
+
+The design rules are for work involving:
+- product UX
+- screen and flow design
+- information architecture
+- design systems
+- AI-generated interface concepts
+- critique of existing products
+
+They are not a replacement for engineering rules. They are a companion domain
+that keeps AI from generating glossy nonsense with no operational backbone.
+
+Start with:
+- [Design Principles](rules/design/30-design-principles.md)
+- [UX Brief and Intent](rules/design/31-ux-brief-and-intent.md)
+- [User Journeys and State Inventory](rules/design/33-user-journeys-and-state-inventory.md)
+- [Screen Review and Critique](rules/design/36-screen-review-and-critique.md)
 
 ## Install
 
@@ -118,21 +143,37 @@ tool access:
 
 ## Structure
 
-```
+```text
 .ai-rules/
   .version                         # Origin and version tracking
   AGENTS.md                        # Entry point and core principles
   setup.sh                         # Platform stub generator
   install.sh                       # curl|bash installer
+  docs/
+    overview.md                    # Why the framework exists and what it covers
+    how-to-use.md                  # Recommended workflow by task type
+    rule-loading-order.md          # How AI should discover and apply rules
+    examples/
+      design-example.md            # Example of the design rules in practice
   rules/
     00-project-planning.md         # Phased planning for multi-feature projects
-    01-workflow-overview.md         # End-to-end process with human gates
+    01-workflow-overview.md        # End-to-end process with human gates
     02-prd.md                      # Codebase analysis, PRD generation, acceptance criteria
     03-task-generation.md          # Task decomposition with validation criteria
     04-validation-first.md         # Write validation before implementation
     05-task-execution.md           # Execute tasks, track progress, verify completion
     06-session-state.md            # Persist context across sessions
     07-tdd-enforcement.md          # (Optional) Red-then-green TDD evidence
+    design/
+      30-design-principles.md      # Design principles for coherent user-facing work
+      31-ux-brief-and-intent.md    # User, job, emotional goal, constraints, success
+      32-information-architecture.md
+      33-user-journeys-and-state-inventory.md
+      34-trust-feedback-and-confirmation.md
+      35-visual-system-and-hierarchy.md
+      36-screen-review-and-critique.md
+      37-accessibility-and-legibility.md
+      38-design-memory-and-consistency.md
   agents/
     planner.md                     # PRD and project planning agent
     validator.md                   # Validation plan and test-first agent
@@ -145,35 +186,79 @@ tool access:
     prd.md                         # Blank PRD template
     tasks.md                       # Blank task list template
     session-state.md               # Blank session state template
+    design/
+      ux-brief-template.md         # Blank UX brief
+      state-inventory-template.md  # Flow and state inventory
+      screen-spec-template.md      # Single-screen specification
+      design-review-checklist.md   # Structured critique checklist
+      visual-audit-template.md     # Audit an existing product or screen set
+  examples/
+    sample-ux-brief.md             # Filled UX brief example
+    sample-state-inventory.md      # Filled state inventory example
+    sample-design-review.md        # Filled design critique example
 ```
 
 ## How It Works
 
 ### Single Feature Workflow
 
-```
+```text
 Feature Request
   → Codebase Analysis (AI writes, human reviews)     ← GATE
-  → PRD with Acceptance Criteria (human approves)     ← GATE
-  → Task Decomposition (human confirms parent tasks)  ← GATE
+  → PRD with Acceptance Criteria (human approves)    ← GATE
+  → Task Decomposition (human confirms parent tasks) ← GATE
   → For each task:
       → Validation plan (AI writes before coding)
       → Implementation
       → Validation execution (pass/fail reported)
-  → Feature Verification (human confirms ACs met)     ← GATE
+  → Feature Verification (human confirms ACs met)    ← GATE
 ```
 
 ### Multi-Feature Project Workflow
 
-```
+```text
 Project Vision
-  → Project Brief (human approves)                    ← GATE
-  → Phased Plan with Dependencies (human approves)    ← GATE
-  → For each phase:
-      → PRDs for each feature (single feature workflow above)
-      → Phase Gate Review (human confirms exit criteria)  ← GATE
-  → Project Completion Summary
+  → Project Brief (human approves)                   ← GATE
+  → Phased Plan with Dependencies (human approves)  ← GATE
+  → Phase PRDs (human approves each)                ← GATE
+  → Phase Task Lists (human confirms parent tasks)  ← GATE
+  → Implementation + Validation per task
+  → Phase Verification                               ← GATE
+  → Next Phase
 ```
+
+### Design Workflow
+
+```text
+Design Request
+  → UX Brief (user, job, emotional goal, constraints)
+  → IA + Journey Mapping
+  → State Inventory
+  → Screen Specs / Concept Direction
+  → Trust + Feedback Review
+  → Accessibility + Legibility Review
+  → Design Critique with explicit tradeoffs
+```
+
+The core rule for design work is simple: **do not polish a screen before you
+understand the flow and state model that screen belongs to.**
+
+## Suggested Entry Points
+
+| Work Type | Start Here |
+|-----------|------------|
+| Single feature implementation | `rules/02-prd.md` |
+| Multi-feature initiative | `rules/00-project-planning.md` |
+| User-facing product or UX work | `rules/design/31-ux-brief-and-intent.md` |
+| Critique of an existing app or screen set | `templates/design/visual-audit-template.md` |
+| Structured design review | `rules/design/36-screen-review-and-critique.md` |
+
+## Documentation
+
+- [Overview](docs/overview.md)
+- [How to Use](docs/how-to-use.md)
+- [Rule Loading Order](docs/rule-loading-order.md)
+- [Design Example](docs/examples/design-example.md)
 
 ## The Three Types of Criteria
 
@@ -208,9 +293,10 @@ These rules are intentionally generic. Fork this repo to add:
 - Project management tool integration (Jira, Linear, etc.)
 - Security and compliance checks
 - Infrastructure-specific validation patterns
+- Product design system conventions and review requirements
 
-Keep extensions in a separate file (e.g., `rules/06-org-standards.md`) and
-reference it from your fork's `AGENTS.md`.
+Keep extensions in a separate file or subtree of files and reference them from
+your fork's `AGENTS.md`.
 
 ## Versioning
 
