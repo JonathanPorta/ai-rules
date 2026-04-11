@@ -16,8 +16,8 @@
 1. Read `AGENTS.md`.
 2. Start with `rules/design/31-ux-brief-and-intent.md`.
 3. Capture the user, job, success criteria, emotional goal, and constraints.
-4. Map the journey and enumerate the state inventory.
-5. Define information architecture.
+4. Define information architecture and map the journey.
+5. Enumerate the state inventory.
 6. Draft screen specs or concepts.
 7. Review for trust, feedback, hierarchy, accessibility, and consistency.
 8. Save the outputs using the templates in `templates/design/`.
