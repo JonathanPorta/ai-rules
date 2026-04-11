@@ -164,7 +164,7 @@ tool access:
     05-task-execution.md           # Execute tasks, track progress, verify completion
     06-session-state.md            # Persist context across sessions
     07-command-surface.md          # Required command and tool invocation boundaries
-    07-tdd-enforcement.md          # (Optional) Red-then-green TDD evidence
+    08-tdd-enforcement.md          # (Optional) Red-then-green TDD evidence
     design/
       30-design-principles.md      # Design principles for coherent user-facing work
       31-ux-brief-and-intent.md    # User, job, emotional goal, constraints, success
