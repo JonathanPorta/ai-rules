@@ -12,15 +12,16 @@ For each task, follow this sequence:
 1. Read the task description and its validation criteria.
 2. Read the session state file (if resuming — see [06-session-state.md](06-session-state.md)).
 3. Write the validation plan (per [04-validation-first.md](04-validation-first.md)).
-4. Present the validation plan (unless auto-proceed is enabled).
-5. Write failing tests (if applicable).
-6. Implement the task.
-7. Run all validation steps.
-8. Report validation results.
-9. On all-pass: mark the task `[x]` in the task file, proceed.
+4. Complete the task preflight ledger.
+5. Present the validation plan unless session state explicitly records `Validation Review Mode: auto-proceed`.
+6. Write failing tests (if applicable).
+7. Implement the task.
+8. Run all validation steps.
+9. Report validation results in an inspectable artifact.
 10. On any-fail: fix and re-validate. Do NOT mark complete.
-11. Update the session state file (current position, decisions, learnings).
-12. Commit with a meaningful message referencing the task number.
+11. On all-pass: update the session state file (current position, decisions, learnings).
+12. Create the per-parent-task commit with a meaningful message referencing the task number.
+13. Then mark the task `[x]` in the task file and proceed.
 
 ## Progress Tracking
 
@@ -54,6 +55,15 @@ order:
 The task markdown file is the canonical record of progress. The session state
 file is the canonical record of context. Keep both accurate.
 
+### Reconciliation audit cadence
+After every two completed parent tasks, run a reconciliation audit comparing:
+- implementation vs PRD,
+- implementation vs task file,
+- task file vs session state,
+- and implementation vs any applicable design/spec documents.
+
+This is in addition to the final reconciliation audit in the Completion section.
+
 ## Scope Discipline
 
 ### No silent additions
@@ -62,6 +72,26 @@ silently do it. Add it as a new task and flag it to the human:
 
 > "I discovered [X] needs to happen for [reason]. I have added it as task N.0.
 > Should I proceed with it, or should we discuss first?"
+
+### Scope drift notice required
+If implementation requires a new externally visible command, route, schema change,
+dependency, parent task, or any new file/component that materially changes scope,
+review surface, or acceptance-criteria coverage beyond what was approved in the
+PRD or task list, stop and surface it to the human before proceeding.
+
+Use this format:
+
+> "Scope drift notice:
+> - Discovered change: [what changed]
+> - Why it is needed: [reason]
+> - Affected acceptance criteria: [ACs or none]
+> - Options:
+>   A) Approve and proceed
+>   B) Add/adjust tasks first
+>   C) Revisit the PRD"
+
+Minor refactors that do not change scope may proceed, but they should still be
+noted in the task file or session state when they materially affect review.
 
 ### No silent removals
 If a task turns out to be unnecessary, do not delete it. Mark it as skipped
@@ -136,7 +166,8 @@ starting implementation:
 When all tasks are checked off:
 
 ### 1. Run full project checks
-Execute the project's complete validation suite:
+Execute the project's complete validation suite using the repository's canonical
+command surface when it exists (see [07-command-surface.md](07-command-surface.md)):
 - Full test suite
 - Linter
 - Type checker (if applicable)
@@ -154,7 +185,21 @@ Execute the project's complete validation suite:
 | AC-3 | Changes persist across page reloads  | Integration test confirms DB write    | MET    |
 ```
 
-### 3. List any discovered issues or follow-up work
+### 3. Run a reconciliation audit
+
+Before declaring the feature complete, compare:
+- implementation vs PRD,
+- implementation vs task file,
+- task file vs session state,
+- and implementation vs any applicable design/spec documents.
+
+Classify findings as:
+- **blocker** — must be fixed before sign-off,
+- **major** — must be surfaced and resolved before sign-off,
+- **minor** — can be logged as follow-up work,
+- **info** — no action required.
+
+### 4. List any discovered issues or follow-up work
 
 ```markdown
 ## Follow-Up Items
@@ -163,9 +208,15 @@ Execute the project's complete validation suite:
 - [ ] Enhancement: Bulk profile updates not supported (was a non-goal)
 ```
 
-### 4. Wait for human sign-off
+### 5. Wait for human sign-off
 Features are not complete until the human confirms. Present the evidence and
 wait:
+
+A parent task should not be treated as complete until:
+- the validation results table exists,
+- evidence bullets or notes exist for the implemented checks,
+- the session state has been updated,
+- and the corresponding commit has been created.
 
 > "All tasks are complete and validated. The acceptance criteria verification
 > table is above. Please review and confirm, or identify any criteria that
@@ -173,8 +224,9 @@ wait:
 
 ## Commit Conventions
 
-Commit after each completed parent task (not each sub-task). Reference the
-task number in the commit message:
+Create one commit per completed parent task (not each sub-task). The commit is
+part of completing the parent task, not a follow-up step after completion.
+Reference the task number in the commit message:
 
 ```
 feat: implement profile update API (task 2.0)
