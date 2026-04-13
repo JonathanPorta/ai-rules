@@ -19,6 +19,13 @@ validate that the task is correctly completed. This is non-negotiable.
 
 Before touching any implementation file, produce a validation plan for the task.
 
+The validation plan MUST be written into an artifact the human can inspect.
+Preferred locations:
+- directly beneath the parent task in `tasks-<feature-name>.md`, or
+- in a clearly named validation subsection referenced from the task file.
+
+It is not enough to merely state that a validation plan exists.
+
 ```markdown
 ### Task 2.0: Implement profile update API
 
@@ -42,16 +49,35 @@ Before touching any implementation file, produce a validation plan for the task.
    - Missing auth token -> 401
 ```
 
+### Step 1A: Complete the Task Preflight Ledger
+
+Before implementation begins, complete this ledger for the current task:
+
+```markdown
+## Task X.Y Preflight
+- Validation plan written: yes/no
+- Validation plan saved in artifact: yes/no
+- Validation review mode recorded in session state: `required` / `auto-proceed`
+- Make targets or equivalent command surface identified: yes/no
+- Acceptance criteria served by this task listed: yes/no
+- Relevant files re-read before modification: yes/no
+```
+
+Implementation MUST NOT begin until every yes/no item is `yes`.
+
 ### Step 2: Present for Review (Optional Gate)
 
-Present the validation plan to the human. If the human has opted into
-auto-proceed for this workflow, skip to Step 3.
+Present the validation plan to the human unless session state explicitly
+records `Validation Review Mode: auto-proceed`. Skip to Step 3 only when that
+value is already recorded in session state.
 
 To opt into auto-proceed, the human says something like:
 - "Auto-proceed on validation plans"
 - "Skip validation review, I trust you"
 - "Go ahead without checking with me on each task"
 
+When the human opts in, update session state to
+`Validation Review Mode: auto-proceed` before skipping future per-task review.
 The default is to present and wait. When in doubt, present.
 
 ### Step 3: Write Tests First (When Applicable)
@@ -95,7 +121,13 @@ Run every validation step. Report results using this table format:
 ### Step 6: Act on Results
 
 **All pass:**
-Mark the task complete in the task file (`- [x]`). Proceed to the next task.
+Mark the task complete in the task file (`- [x]`) only after:
+1. the validation results table exists in an inspectable artifact,
+2. the session state has been updated,
+3. the task file reflects the final status,
+4. and any completion requirements in [05-task-execution.md](05-task-execution.md) have been satisfied.
+
+Proceed to the next task.
 
 **Any fail:**
 1. Fix the issue.

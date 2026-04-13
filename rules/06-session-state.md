@@ -35,6 +35,8 @@ The filename follows the pattern `session-state-<feature-name>.md`.
 Last updated: <ISO 8601 timestamp>
 
 ### Current Position
+- **Current Phase:** Phase 1 / 2 / 3 / 4
+- **Validation Review Mode:** required / auto-proceed
 - **Working on:** Task X.Y — <task description>
 - **Status:** <specific state, e.g., "test written and failing, implementation not started">
 - **Blocked:** Yes/No — <reason if blocked>
@@ -81,6 +83,9 @@ changes direction), record it in the Key Decisions section immediately. These ar
 the most expensive things to lose — re-asking wastes the human's time and may
 get a different answer.
 
+If the human opts into or out of validation auto-proceed, update the
+`Validation Review Mode` field immediately.
+
 ### Before ending a session
 If you know the session is ending (human says "stopping for today", context is
 getting large, etc.), write a final update with detailed "What's Next" steps.
@@ -125,6 +130,10 @@ If a new decision contradicts an old one, add the new one and note the change:
 The task file tracks what's done (checkboxes). The session state tracks what you
 know and what you decided. Don't repeat progress information that's already in
 the task file — just reference the current position.
+
+### Workflow controls must stay current
+If `Validation Review Mode` or `Current Phase` changes, update the session state
+immediately. These fields are workflow controls, not optional notes.
 
 ### Delete on feature completion
 When a feature passes final verification and the human signs off, the session

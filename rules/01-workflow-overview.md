@@ -53,16 +53,23 @@ When in doubt, ask the human:
 For EACH task:
 
 1. AI writes validation steps BEFORE implementation per [04-validation-first.md](04-validation-first.md).
-2. AI presents validation steps to the human (unless human has opted into auto-proceed).
-3. AI implements the task per [05-task-execution.md](05-task-execution.md).
-4. AI executes validation steps and reports results.
-5. On pass: check off task, update session state, proceed to next.
-6. On fail: stop, report, wait for guidance.
+2. AI records the validation review mode in session state (`required` or `auto-proceed`) if it is not already present.
+3. AI completes the per-task preflight ledger defined in [04-validation-first.md](04-validation-first.md) BEFORE touching implementation files.
+4. AI presents validation steps to the human unless session state explicitly records `Validation Review Mode: auto-proceed`.
+5. AI implements the task per [05-task-execution.md](05-task-execution.md).
+6. AI executes validation steps and reports results.
+7. On pass: update session state, create the per-parent-task commit, check off the parent task, and proceed to the next.
+8. On fail: stop, report, wait for guidance.
 
 **Session state:** The AI maintains a session state file throughout this phase
 (see [06-session-state.md](06-session-state.md)). This file persists decisions,
 codebase learnings, and current position so that context loss does not require
 re-exploration. Updated after each parent task and after any human decision.
+
+**Reconciliation audits:** After every two completed parent tasks, and again
+before claiming feature completion, the AI runs a reconciliation audit comparing
+implementation vs PRD, task list, session state, and any applicable design/spec
+documents. Any blocker or major discrepancy must be resolved before continuing.
 
 ### Phase 4: Feature Verification (Human)
 
@@ -86,8 +93,19 @@ re-exploration. Updated after each parent task and after any human decision.
 | 4 | Feature Verification | Human | AC met with evidence |
 | 5 | Phase Gate | Human | Phase exit criteria met (multi-feature only) |
 
-**Optional gate:** Per-task validation plan review (Phase 3, step 2). The human
-can opt into auto-proceed to skip this for trusted workflows.
+**Optional gate:** Per-task validation plan review (Phase 3, step 4). This
+gate is skippable only when session state explicitly records `Validation Review
+Mode: auto-proceed`.
+
+## Phase 3 Blocking Conditions
+
+Phase 3 work MUST NOT begin for a task until all of the following are true:
+
+- the validation plan exists,
+- the preflight ledger is fully marked ready,
+- the relevant Make targets or equivalent command surface have been identified,
+- any scope drift has been surfaced to the human per [05-task-execution.md](05-task-execution.md),
+- and the current validation review mode is recorded in session state.
 
 ## File Organization
 

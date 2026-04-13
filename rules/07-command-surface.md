@@ -69,7 +69,16 @@ This means:
 
 ## Required Behavior
 
-### 1. Prefer existing Make targets
+### 1. Discover the canonical command surface before use
+
+Before running project workflow commands, inspect the repository's canonical
+command surface and identify the public commands or targets relevant to the
+work. If the `Makefile` is the canonical command surface, inspect the
+`Makefile`; otherwise, inspect the appropriate task runner, script entry
+points, or documented workflow interface. Do not assume raw commands first and
+only discover the canonical commands or Make targets later.
+
+### 2. Prefer existing Make targets
 
 If a relevant Make target exists, use it.
 
@@ -86,7 +95,7 @@ Only bypass a Make target when:
 
 If bypassing a target, state why.
 
-### 2. Create or extend the Makefile when appropriate
+### 3. Create or extend the Makefile when appropriate
 
 If the repository reasonably supports Make but has no Makefile, create one when:
 - introducing or standardizing developer workflows,
@@ -96,7 +105,7 @@ If the repository reasonably supports Make but has no Makefile, create one when:
 If a Makefile exists, extend it instead of creating duplicate shell scripts or
 duplicating raw commands in CI.
 
-### 3. Standard target vocabulary
+### 4. Standard target vocabulary
 
 Use these standard target names when they apply:
 
@@ -123,7 +132,7 @@ Use these standard target names when they apply:
 Use the conventional name unless there is a strong project-specific reason not
 to.
 
-### 4. Help target required
+### 5. Help target required
 
 The Makefile SHOULD include a `help` target or equivalent self-documenting
 mechanism so humans and AI agents can discover the available workflow.
@@ -133,7 +142,7 @@ A good `help` target:
 - provides a one-line description for each,
 - exposes the intended public command surface.
 
-### 5. Keep business logic centralized
+### 6. Keep business logic centralized
 
 Do not duplicate the same workflow logic across:
 - CI YAML,
@@ -148,7 +157,7 @@ Prefer:
 - CI calling the Makefile,
 - docs referencing the Makefile.
 
-### 6. Keep target intent stable
+### 7. Keep target intent stable
 
 Once a standard target exists, do not silently change its meaning in a way that
 will surprise developers, CI, or AI agents.
@@ -200,8 +209,9 @@ If CI cannot use the Make target, document the reason in the workflow or PR.
 
 ## AI Agent Requirements
 
-AI agents MUST treat the Makefile as the first place to look for project
-workflows.
+AI agents MUST treat the repository's canonical command surface as the first
+place to look for project workflows. When a `Makefile` exists and is canonical,
+it is the first place to look.
 
 When analyzing a repository, identify:
 - whether a Makefile exists,
@@ -209,6 +219,13 @@ When analyzing a repository, identify:
 - whether CI uses them,
 - whether README/docs use them,
 - and whether command drift exists.
+
+Before the first implementation step for a feature, the AI agent MUST record the
+command-surface discovery in the codebase analysis, PRD, task file, or session
+state. At minimum, identify:
+- whether a Makefile exists,
+- which public targets map to test, lint, build, dev, and check workflows,
+- and whether any required workflow lacks a target.
 
 When executing work:
 - prefer Make targets for setup, validation, testing, linting, formatting,
