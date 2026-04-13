@@ -58,7 +58,7 @@ For EACH task:
 4. AI presents validation steps to the human unless session state explicitly records `Validation Review Mode: auto-proceed`.
 5. AI implements the task per [05-task-execution.md](05-task-execution.md).
 6. AI executes validation steps and reports results.
-7. On pass: check off task, update session state, proceed to next.
+7. On pass: update session state, create the per-parent-task commit, check off the parent task, and proceed to the next.
 8. On fail: stop, report, wait for guidance.
 
 **Session state:** The AI maintains a session state file throughout this phase

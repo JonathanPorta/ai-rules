@@ -124,7 +124,8 @@ Run every validation step. Report results using this table format:
 Mark the task complete in the task file (`- [x]`) only after:
 1. the validation results table exists in an inspectable artifact,
 2. the session state has been updated,
-3. and the task file reflects the final status.
+3. the task file reflects the final status,
+4. and any completion requirements in [05-task-execution.md](05-task-execution.md) have been satisfied.
 
 Proceed to the next task.
 
