@@ -73,10 +73,10 @@ This means:
 
 Before running project workflow commands, inspect the repository's canonical
 command surface and identify the public commands or targets relevant to the
-work. If the repository uses a `Makefile`, inspect the `Makefile`; otherwise,
-inspect the appropriate task runner, script entry points, or documented workflow
-interface. Do not assume raw commands first and only discover the canonical
-commands or Make targets later.
+work. If the `Makefile` is the canonical command surface, inspect the
+`Makefile`; otherwise, inspect the appropriate task runner, script entry
+points, or documented workflow interface. Do not assume raw commands first and
+only discover the canonical commands or Make targets later.
 
 ### 2. Prefer existing Make targets
 
