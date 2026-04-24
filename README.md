@@ -98,26 +98,28 @@ After installing, generate platform-specific config stubs:
 .ai-rules/setup.sh --list
 ```
 
-The setup script creates thin stub files at each platform's expected config
-location (e.g., `.cursorrules`, `.windsurfrules`). These stubs reference
-`.ai-rules/AGENTS.md` and leave room for project-specific additions.
+The setup script creates thin stub files at each platform's canonical config
+location. These stubs reference `.ai-rules/AGENTS.md` and leave room for
+project-specific additions.
 
 ### Platform Details
 
-| Platform | Config Location | Auto-discovers? |
-|----------|----------------|-----------------|
-| Claude Code | `.ai-rules/AGENTS.md` | Yes — no stub needed |
-| Cursor | `.cursorrules` | No — stub created by setup.sh |
-| Windsurf | `.windsurfrules` | No — stub created by setup.sh |
-| GitHub Copilot | `.github/copilot-instructions.md` | No — stub created by setup.sh |
-| Amp | `.amp/rules/ai-rules.md` | No — stub created by setup.sh |
+| Platform | Config Location | Format |
+|----------|----------------|--------|
+| Claude Code | `CLAUDE.md` (root) | Plain markdown; uses `@.ai-rules/AGENTS.md` import |
+| Cursor | `.cursor/rules/ai-rules.mdc` | MDC with `alwaysApply: true` frontmatter |
+| Windsurf | `.windsurf/rules/ai-rules.md` | Markdown with `trigger: always_on` frontmatter |
+| GitHub Copilot | `.github/copilot-instructions.md` | Plain markdown |
+| Amp | `AGENTS.md` (root) | Plain markdown; Amp walks parent dirs |
 
-## Custom Agents (GitHub Copilot)
+Stub bodies live in `templates/platform-stubs/`. To add a platform, edit
+`PLATFORMS_TABLE` in `setup.sh` and drop a matching template file there.
 
-The `agents/` directory contains pre-built agent definitions for use with
-[GitHub Copilot coding agent](https://docs.github.com/en/copilot/reference/custom-agents-configuration).
-When you run `setup.sh --platforms copilot`, these agents are copied to
-`.github/agents/` in your project.
+## Role-Based Agents
+
+The `agents/` directory contains four complementary agent definitions that
+mirror the workflow's human gates. Each role has scoped tool access to
+enforce separation of planning, validation, implementation, and review.
 
 | Agent | Tools | Purpose |
 |-------|-------|---------|
@@ -125,6 +127,12 @@ When you run `setup.sh --platforms copilot`, these agents are copied to
 | [implementer](agents/implementer.md) | read, search, edit, execute | Decomposes approved PRDs into tasks and implements them using validation-first development. |
 | [validator](agents/validator.md) | read, search, edit, execute | Writes validation plans and test cases before implementation, then executes them to verify task completion. |
 | [reviewer](agents/reviewer.md) | read, search, execute | Reviews completed work against acceptance criteria and produces verification evidence tables. |
+
+These files are instruction prompts, not platform-native agent definitions.
+Adapt them to your agent runner of choice — for example, GitHub Copilot's
+custom agents feature requires `*.agent.md` files with specific YAML
+frontmatter (prompt, tools, MCP servers), which is a per-project wrapping
+step beyond what `setup.sh` generates.
 
 These agents divide the ai-rules workflow into distinct roles with appropriate
 tool access:
@@ -193,6 +201,12 @@ tool access:
       screen-spec-template.md      # Single-screen specification
       design-review-checklist.md   # Structured critique checklist
       visual-audit-template.md     # Audit an existing product or screen set
+    platform-stubs/
+      claude.md                    # CLAUDE.md stub with @.ai-rules/AGENTS.md import
+      cursor.mdc                   # Cursor MDC stub (alwaysApply: true)
+      windsurf.md                  # Windsurf stub (trigger: always_on)
+      copilot.md                   # .github/copilot-instructions.md stub
+      amp.md                       # Root AGENTS.md stub for Amp
   examples/
     sample-ux-brief.md             # Filled UX brief example
     sample-state-inventory.md      # Filled state inventory example
@@ -280,7 +294,7 @@ list to the "Enabled" list under the Optional Rules section.
 
 | Rule | What It Does | Enable When |
 |------|-------------|-------------|
-| [TDD Enforcement](rules/07-tdd-enforcement.md) | Requires red-then-green test evidence | Your team practices TDD and has test infrastructure |
+| [TDD Enforcement](rules/08-tdd-enforcement.md) | Requires red-then-green test evidence | Your team practices TDD and has test infrastructure |
 
 Optional rules also come with supporting tooling in `scripts/`:
 - `tdd-check.sh` — compares git timestamps to verify test-before-implementation ordering

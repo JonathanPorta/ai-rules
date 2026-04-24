@@ -4,7 +4,7 @@
 #
 # Checks that a test file was committed before or at the same time as its
 # corresponding implementation file. This is a supplementary check — it does
-# not replace the red-then-green evidence requirement in 07-tdd-enforcement.md.
+# not replace the red-then-green evidence requirement in rules/08-tdd-enforcement.md.
 #
 # Usage:
 #   ./scripts/tdd-check.sh <implementation-file> <test-file>

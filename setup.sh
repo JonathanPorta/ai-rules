@@ -1,24 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# setup.sh — Generate platform-specific stub files that reference .ai-rules/
+# setup.sh — Generate platform-specific stub files that reference .ai-rules/.
 #
-# Usage:
+# Intended to be run from inside a consumer project's .ai-rules/ subtree:
+#
 #   .ai-rules/setup.sh --platforms cursor,windsurf,copilot
 #   .ai-rules/setup.sh --platforms all
 #   .ai-rules/setup.sh --list
 #
-# This script is idempotent. If a stub already exists and contains the
-# reference line, it is left untouched (preserving project-specific additions).
-# If the file exists but lacks the reference, the reference is prepended.
+# Idempotency: if a stub already contains the reference marker it is left
+# untouched. If a file exists at the target path without the marker, the
+# stub is prepended — UNLESS the existing file starts with YAML frontmatter,
+# in which case the script warns and skips rather than corrupt the file.
+#
+# Platform definitions live in PLATFORMS_TABLE below; stub bodies live in
+# templates/platform-stubs/. To add or modify a platform, edit both.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+STUBS_DIR="$SCRIPT_DIR/templates/platform-stubs"
+AGENTS_MD="$SCRIPT_DIR/AGENTS.md"
 RULES_REL=".ai-rules"
 
-REFERENCE_MARKER="# ai-rules-reference"
+REFERENCE_MARKER="ai-rules-reference"
 
-SUPPORTED_PLATFORMS="claude,cursor,windsurf,copilot,amp"
+# name|relative_path|template_filename|description
+# Keep in sync with templates/platform-stubs/ and README.md platform table.
+PLATFORMS_TABLE=(
+  "claude|CLAUDE.md|claude.md|Claude Code (root CLAUDE.md with @import)"
+  "cursor|.cursor/rules/ai-rules.mdc|cursor.mdc|Cursor (.cursor/rules/*.mdc with MDC frontmatter)"
+  "windsurf|.windsurf/rules/ai-rules.md|windsurf.md|Windsurf (.windsurf/rules/*.md with YAML frontmatter)"
+  "copilot|.github/copilot-instructions.md|copilot.md|GitHub Copilot (.github/copilot-instructions.md)"
+  "amp|AGENTS.md|amp.md|Amp (root AGENTS.md)"
+)
+
+COUNT_CREATE=0
+COUNT_UPDATE=0
+COUNT_SKIP=0
+COUNT_WARN=0
 
 usage() {
   local exit_code="${1:-0}"
@@ -28,10 +48,9 @@ Usage: $(basename "$0") [OPTIONS]
 Generate platform-specific config stubs that reference ${RULES_REL}/.
 
 Options:
-  --platforms <list>   Comma-separated platforms: claude,cursor,windsurf,copilot,amp
-                       Use 'all' for every supported platform.
+  --platforms <list>   Comma-separated platforms (see --list), or 'all'.
   --list               List supported platforms and exit.
-  --dry-run            Show what would be created without writing files.
+  --dry-run            Show what would happen without writing files.
   -h, --help           Show this help message.
 
 Examples:
@@ -44,12 +63,35 @@ EOF
 
 list_platforms() {
   echo "Supported platforms:"
-  echo "  claude     - Claude Code (auto-discovers AGENTS.md, stub optional)"
-  echo "  cursor     - Cursor (.cursorrules)"
-  echo "  windsurf   - Windsurf (.windsurfrules)"
-  echo "  copilot    - GitHub Copilot (.github/copilot-instructions.md + .github/agents/)"
-  echo "  amp        - Amp (.amp/rules/ai-rules.md)"
+  local row name desc
+  for row in "${PLATFORMS_TABLE[@]}"; do
+    IFS='|' read -r name _ _ desc <<< "$row"
+    printf "  %-10s - %s\n" "$name" "$desc"
+  done
   exit 0
+}
+
+supported_names() {
+  local row name names=""
+  for row in "${PLATFORMS_TABLE[@]}"; do
+    IFS='|' read -r name _ _ _ <<< "$row"
+    names="${names:+$names,}$name"
+  done
+  echo "$names"
+}
+
+# Sets PL_PATH and PL_TEMPLATE for the requested platform. Returns 1 on miss.
+lookup_platform() {
+  local target="$1" row name path template _desc
+  for row in "${PLATFORMS_TABLE[@]}"; do
+    IFS='|' read -r name path template _desc <<< "$row"
+    if [[ "$name" == "$target" ]]; then
+      PL_PATH="$path"
+      PL_TEMPLATE="$template"
+      return 0
+    fi
+  done
+  return 1
 }
 
 DRY_RUN=false
@@ -77,45 +119,74 @@ if [[ -z "$PLATFORMS" ]]; then
 fi
 
 if [[ "$PLATFORMS" == "all" ]]; then
-  PLATFORMS="$SUPPORTED_PLATFORMS"
+  PLATFORMS="$(supported_names)"
 fi
 
-# Check if file already contains our reference marker
+if [[ ! -f "$AGENTS_MD" ]]; then
+  echo "Warning: $AGENTS_MD not found." >&2
+  echo "         Stubs will reference ${RULES_REL}/AGENTS.md but the source is missing." >&2
+fi
+
 has_reference() {
   local file="$1"
-  [[ -f "$file" ]] && grep -q "$REFERENCE_MARKER" "$file"
+  [[ -f "$file" ]] && grep -qF -- "$REFERENCE_MARKER" "$file"
 }
 
-# Write or update a stub file
-write_stub() {
+has_frontmatter() {
   local file="$1"
-  local content="$2"
-  local platform="$3"
+  [[ -f "$file" ]] || return 1
+  [[ "$(grep -v -- '^[[:space:]]*$' "$file" | head -n 1)" == "---" ]]
+}
 
-  if has_reference "$file"; then
-    echo "  [skip] $file — already has ai-rules reference"
-    return
+write_stub() {
+  local abs_path="$1" template_file="$2" platform="$3" rel_path="$4"
+
+  if [[ ! -f "$template_file" ]]; then
+    echo "  [warn]   template missing: $template_file — skipping $platform" >&2
+    COUNT_WARN=$((COUNT_WARN + 1))
+    return 0
+  fi
+
+  if has_reference "$abs_path"; then
+    echo "  [skip]   $rel_path — already has ai-rules reference"
+    COUNT_SKIP=$((COUNT_SKIP + 1))
+    return 0
+  fi
+
+  if [[ -f "$abs_path" ]] && has_frontmatter "$abs_path"; then
+    echo "  [warn]   $rel_path — existing file has YAML frontmatter; cannot safely prepend." >&2
+    echo "           Add '<!-- $REFERENCE_MARKER -->' manually after the frontmatter, or" >&2
+    echo "           remove the file to regenerate from the template." >&2
+    COUNT_WARN=$((COUNT_WARN + 1))
+    return 0
   fi
 
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  [dry-run] would create/update $file ($platform)"
-    return
+    if [[ -f "$abs_path" ]]; then
+      echo "  [dry-run] would update $rel_path ($platform)"
+      COUNT_UPDATE=$((COUNT_UPDATE + 1))
+    else
+      echo "  [dry-run] would create $rel_path ($platform)"
+      COUNT_CREATE=$((COUNT_CREATE + 1))
+    fi
+    return 0
   fi
 
-  local dir
-  dir="$(dirname "$file")"
-  [[ -d "$dir" ]] || mkdir -p "$dir"
+  mkdir -p "$(dirname "$abs_path")"
 
-  if [[ -f "$file" ]]; then
-    # File exists but lacks reference — prepend
+  if [[ -f "$abs_path" ]]; then
     local tmp
     tmp="$(mktemp)"
-    printf '%s\n\n' "$content" | cat - "$file" > "$tmp"
-    mv "$tmp" "$file"
-    echo "  [update] $file — prepended ai-rules reference"
+    { cat "$template_file"; printf '\n'; cat "$abs_path"; } > "$tmp"
+    # Use redirection (not mv) so $abs_path keeps its original inode, mode, and ACLs.
+    cat "$tmp" > "$abs_path"
+    rm -f "$tmp"
+    echo "  [update] $rel_path — prepended ai-rules reference"
+    COUNT_UPDATE=$((COUNT_UPDATE + 1))
   else
-    printf '%s\n' "$content" > "$file"
-    echo "  [create] $file"
+    cp "$template_file" "$abs_path"
+    echo "  [create] $rel_path"
+    COUNT_CREATE=$((COUNT_CREATE + 1))
   fi
 }
 
@@ -125,78 +196,24 @@ echo ""
 IFS=',' read -ra PLATFORM_LIST <<< "$PLATFORMS"
 for platform in "${PLATFORM_LIST[@]}"; do
   platform="$(echo "$platform" | tr -d '[:space:]')"
-  case "$platform" in
-    claude)
-      echo "Claude Code:"
-      echo "  [info] Claude Code auto-discovers ${RULES_REL}/AGENTS.md — no stub needed."
-      echo "  [info] To add an explicit reference, create a root AGENTS.md that imports it."
-      ;;
-    cursor)
-      echo "Cursor:"
-      STUB="${REFERENCE_MARKER}
-# Read and follow all rules in ${RULES_REL}/AGENTS.md and the files it
-# references before beginning any feature work.
-@file ${RULES_REL}/AGENTS.md
+  [[ -z "$platform" ]] && continue
 
-# Project-specific Cursor rules below this line"
-      write_stub "$PROJECT_ROOT/.cursorrules" "$STUB" "cursor"
-      ;;
-    windsurf)
-      echo "Windsurf:"
-      STUB="${REFERENCE_MARKER}
-Before starting any feature work, read and follow the rules defined in
-${RULES_REL}/AGENTS.md and all referenced rule files in ${RULES_REL}/rules/.
+  if ! lookup_platform "$platform"; then
+    echo "Unknown platform: $platform (skipping)" >&2
+    echo "  Run with --list to see supported platforms." >&2
+    echo ""
+    COUNT_WARN=$((COUNT_WARN + 1))
+    continue
+  fi
 
-Project-specific Windsurf rules below this line:"
-      write_stub "$PROJECT_ROOT/.windsurfrules" "$STUB" "windsurf"
-      ;;
-    copilot)
-      echo "GitHub Copilot:"
-      STUB="<!-- ${REFERENCE_MARKER} -->
-## AI Development Rules
-
-Follow the AI development rules defined in \`${RULES_REL}/AGENTS.md\`.
-Read all referenced rule files before beginning feature work.
-
-<!-- Project-specific Copilot instructions below this line -->"
-      write_stub "$PROJECT_ROOT/.github/copilot-instructions.md" "$STUB" "copilot"
-
-      # Copy custom agent definitions for Copilot coding agent
-      AGENTS_SRC="${SCRIPT_DIR}/agents"
-      AGENTS_DEST="${PROJECT_ROOT}/.github/agents"
-      if [[ -d "$AGENTS_SRC" ]]; then
-        if [[ "$DRY_RUN" == true ]]; then
-          echo "  [dry-run] would copy agents from ${RULES_REL}/agents/ to .github/agents/"
-        else
-          [[ -d "$AGENTS_DEST" ]] || mkdir -p "$AGENTS_DEST"
-          for agent_file in "$AGENTS_SRC"/*.md; do
-            [[ -f "$agent_file" ]] || continue
-            dest_file="${AGENTS_DEST}/$(basename "$agent_file")"
-            if [[ -f "$dest_file" ]]; then
-              echo "  [skip] .github/agents/$(basename "$agent_file") — already exists"
-            else
-              cp "$agent_file" "$dest_file"
-              echo "  [create] .github/agents/$(basename "$agent_file")"
-            fi
-          done
-        fi
-      fi
-      ;;
-    amp)
-      echo "Amp:"
-      STUB="${REFERENCE_MARKER}
-Read and follow all rules in ${RULES_REL}/AGENTS.md and the files it
-references before beginning any feature work.
-
-Project-specific Amp rules below this line:"
-      write_stub "$PROJECT_ROOT/.amp/rules/ai-rules.md" "$STUB" "amp"
-      ;;
-    *)
-      echo "Unknown platform: $platform (skipping)"
-      echo "  Run with --list to see supported platforms."
-      ;;
-  esac
+  echo "$platform:"
+  write_stub "$PROJECT_ROOT/$PL_PATH" "$STUBS_DIR/$PL_TEMPLATE" "$platform" "$PL_PATH"
   echo ""
 done
 
-echo "Done. Review the generated files and commit them to your project."
+echo "Summary: $COUNT_CREATE created, $COUNT_UPDATE updated, $COUNT_SKIP skipped, $COUNT_WARN warnings."
+if [[ "$DRY_RUN" == true ]]; then
+  echo "(dry-run: no files were written)"
+else
+  echo "Done. Review the generated files and commit them to your project."
+fi
