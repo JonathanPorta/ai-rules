@@ -23,6 +23,10 @@ These rules are mandatory for all feature work. Read all of them before starting
 These rules are required **when the work includes user-facing UX, UI, flows,
 IA, screen specs, design systems, or design critique**.
 
+<!-- Rule numbering: 00–07 core (required), 08 optional, 09–29 reserved,
+     30–38 design domain. -->
+
+
 30. [Design Principles](rules/design/30-design-principles.md) — What makes a product feel coherent, trustworthy, and polished
 31. [UX Brief and Intent](rules/design/31-ux-brief-and-intent.md) — Define the user, job, emotional goal, and success criteria
 32. [Information Architecture](rules/design/32-information-architecture.md) — Organize navigation and content so it stays legible under growth
@@ -39,11 +43,11 @@ These rules are only active when explicitly enabled below. To enable, move a rul
 from the "available" list to the "enabled" list.
 
 **Available:**
-- [TDD Enforcement](rules/07-tdd-enforcement.md) — Red-then-green evidence requirement
+- [TDD Enforcement](rules/08-tdd-enforcement.md) — Red-then-green evidence requirement
 
 **Enabled:**
 <!-- Move rules here to activate them. Example: -->
-<!-- - [TDD Enforcement](rules/07-tdd-enforcement.md) -->
+<!-- - [TDD Enforcement](rules/08-tdd-enforcement.md) -->
 
 ## Core Principles
 
