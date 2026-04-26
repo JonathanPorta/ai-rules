@@ -17,14 +17,16 @@ These rules are mandatory for all feature work. Read all of them before starting
 5. [Task Execution](rules/05-task-execution.md) — How to implement and verify tasks
 6. [Session State](rules/06-session-state.md) — Persisting context across sessions
 7. [Command Surface](rules/07-command-surface.md) — Use Makefile as the canonical command surface
+8. [Git and Publication Boundaries](rules/09-git-and-publication-boundaries.md) — AI prepares; human pushes, opens PRs, releases, deploys
+9. [Phase-Gate Audits](rules/13-phase-gate-audits.md) — Audit before phase transitions, marking work done, generating PR descriptions
 
 ## Domain Rule Sets
 
 These rules are required **when the work includes user-facing UX, UI, flows,
 IA, screen specs, design systems, or design critique**.
 
-<!-- Rule numbering: 00–07 core (required), 08 optional, 09–29 reserved,
-     30–38 design domain. -->
+<!-- Rule numbering: 00–07 + 09 + 13 core (required), 08 + 10–12 optional
+     (see Available/Enabled lists below), 14–29 reserved, 30–38 design domain. -->
 
 
 30. [Design Principles](rules/design/30-design-principles.md) — What makes a product feel coherent, trustworthy, and polished
@@ -37,17 +39,19 @@ IA, screen specs, design systems, or design critique**.
 37. [Accessibility and Legibility](rules/design/37-accessibility-and-legibility.md) — Ensure the interface is usable, readable, and robust
 38. [Design Memory and Consistency](rules/design/38-design-memory-and-consistency.md) — Preserve recurring patterns and decisions over time
 
-## Optional Rules (disabled by default)
+## Optional Rules
 
-These rules are only active when explicitly enabled below. To enable, move a rule
-from the "available" list to the "enabled" list.
+Optional rules listed under **Available** are inactive in this repo;
+those under **Enabled** are active. Forks edit the lists to taste — move
+a rule from Available to Enabled to turn it on, or vice versa.
 
 **Available:**
 - [TDD Enforcement](rules/08-tdd-enforcement.md) — Red-then-green evidence requirement
+- [Styleguide Overlays](rules/11-styleguide-overlays.md) — Optional private writing-style inputs loaded from `.ai-local/`
 
 **Enabled:**
-<!-- Move rules here to activate them. Example: -->
-<!-- - [TDD Enforcement](rules/08-tdd-enforcement.md) -->
+- [Branch, PR, and Commit Conventions](rules/10-branch-pr-commit-conventions.md) — `{initials}/{type}/slug` branches, `type: Title Cased` PR titles, squash-merge default
+- [Human-Copyable Outputs](rules/12-human-copyable-outputs.md) — Write paste-ready prose to `/tmp/ai-*` files with a clipboard command for the human
 
 ## Core Principles
 

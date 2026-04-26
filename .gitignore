@@ -11,3 +11,6 @@ Thumbs.db
 
 # Task artifacts (these are project-specific, not part of the rules repo)
 tasks/
+
+# Private styleguide overlays and other local-only AI configuration
+.ai-local/

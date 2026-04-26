@@ -13,6 +13,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Original upstream identity. Used to detect stale README references in
+# forks where install.sh has been claimed but README hasn't been updated
+# (and to substitute upstream URLs during the standard claim flow). Forks
+# of forks should edit these to match their direct upstream if they want
+# claim-fork.sh to detect staleness against that upstream.
+UPSTREAM_HOST="github.com"
+UPSTREAM_OWNER="JonathanPorta"
+UPSTREAM_REPO="ai-rules"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -37,10 +46,13 @@ for arg in "$@"; do
 Usage: $(basename "$0") [--dry-run] [--no-commit]
 
 Walks you through replacing the upstream repo identity (host, owner, repo)
-with your fork's identity in install.sh and README.md.
+with your fork's identity in install.sh and README.md. Re-running on an
+already-claimed clone is a no-op unless README.md still contains stale
+upstream references.
 
 Options:
-  --dry-run     Show what would change without writing files.
+  --dry-run     Print the planned host/owner/repo values and which files
+                would change. Does not write a unified diff.
   --no-commit   Apply changes but do not create a git commit.
   -h, --help    Show this help.
 EOF
@@ -111,14 +123,30 @@ if [[ -n "$DETECTED_HOST" && "$DETECTED_HOST" != *.* ]]; then
 fi
 
 # -------------------------------------------------------------------
-# Idempotency check — already claimed?
+# Idempotency check — already claimed AND README clean?
 # -------------------------------------------------------------------
+
+# README is stale if (a) we're not the upstream ourselves and (b) README
+# still contains the upstream's URL form. This catches the case where
+# someone manually edited install.sh's defaults (or a previous run only
+# touched install.sh) and left README with original-upstream links.
+README_HAS_STALE_UPSTREAM=false
+if [[ -f "$README_MD" ]] \
+   && [[ "$CURRENT_HOST" != "$UPSTREAM_HOST" \
+         || "$CURRENT_OWNER" != "$UPSTREAM_OWNER" \
+         || "$CURRENT_REPO"  != "$UPSTREAM_REPO" ]]; then
+  if grep -qF "${UPSTREAM_HOST}/${UPSTREAM_OWNER}/${UPSTREAM_REPO}" "$README_MD" \
+     || grep -qF "raw.githubusercontent.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}" "$README_MD"; then
+    README_HAS_STALE_UPSTREAM=true
+  fi
+fi
 
 if [[ -n "$DETECTED_HOST" && "$HOST_LOOKS_REAL" == true \
       && "$DETECTED_HOST" == "$CURRENT_HOST" \
       && "$DETECTED_OWNER" == "$CURRENT_OWNER" \
-      && "$DETECTED_REPO" == "$CURRENT_REPO" ]]; then
-  info "install.sh defaults already match this clone's origin."
+      && "$DETECTED_REPO" == "$CURRENT_REPO" \
+      && "$README_HAS_STALE_UPSTREAM" == false ]]; then
+  info "install.sh defaults already match origin and README has no stale upstream references."
   info "  host=${CURRENT_HOST}  owner=${CURRENT_OWNER}  repo=${CURRENT_REPO}"
   info "Nothing to claim. Exiting."
   exit 0
@@ -201,10 +229,19 @@ validate_identifier "owner" "$NEW_OWNER" '^[A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z
 # Repo names: alphanumerics, dots, underscores, hyphens.
 validate_identifier "repo"  "$NEW_REPO"  '^[A-Za-z0-9._-]+$'
 
-# Same-as-current?
+# Same-as-current? Two sub-cases:
+#  1. install.sh AND README are both already correct → nothing to do.
+#  2. install.sh is correct but README has stale upstream refs → still need
+#     to repair README, just don't touch install.sh.
+SKIP_INSTALL_SH_REWRITE=false
 if [[ "$NEW_HOST" == "$CURRENT_HOST" && "$NEW_OWNER" == "$CURRENT_OWNER" && "$NEW_REPO" == "$CURRENT_REPO" ]]; then
-  info "Values match the current defaults. Nothing to change."
-  exit 0
+  if [[ "$README_HAS_STALE_UPSTREAM" == false ]]; then
+    info "Values match the current defaults. Nothing to change."
+    exit 0
+  fi
+  info "install.sh is already claimed for ${CURRENT_OWNER}/${CURRENT_REPO} — leaving it alone."
+  info "README.md still has upstream references; will rewrite README only."
+  SKIP_INSTALL_SH_REWRITE=true
 fi
 
 # -------------------------------------------------------------------
@@ -245,33 +282,43 @@ else
   SED_INPLACE=(-i '')
 fi
 
-# install.sh: rewrite the three DEFAULT_* lines.
-sed "${SED_INPLACE[@]}" \
-  -e "s|^DEFAULT_HOST=.*|DEFAULT_HOST=\"${NEW_HOST}\"|" \
-  -e "s|^DEFAULT_OWNER=.*|DEFAULT_OWNER=\"${NEW_OWNER}\"|" \
-  -e "s|^DEFAULT_REPO=.*|DEFAULT_REPO=\"${NEW_REPO}\"|" \
-  "$INSTALL_SH"
-info "Updated $INSTALL_SH"
+# install.sh: rewrite the three DEFAULT_* lines (unless we're in the
+# README-only repair path).
+if [[ "$SKIP_INSTALL_SH_REWRITE" == true ]]; then
+  info "Skipped $INSTALL_SH (already claimed for ${CURRENT_OWNER}/${CURRENT_REPO})."
+else
+  sed "${SED_INPLACE[@]}" \
+    -e "s|^DEFAULT_HOST=.*|DEFAULT_HOST=\"${NEW_HOST}\"|" \
+    -e "s|^DEFAULT_OWNER=.*|DEFAULT_OWNER=\"${NEW_OWNER}\"|" \
+    -e "s|^DEFAULT_REPO=.*|DEFAULT_REPO=\"${NEW_REPO}\"|" \
+    "$INSTALL_SH"
+  info "Updated $INSTALL_SH"
+fi
 
 # README.md: rewrite URL patterns. We rewrite specific URL forms (not bare
-# 'JonathanPorta' tokens) so unrelated text — credit lines, license, etc. —
-# is never touched.
+# tokens) so unrelated text — credit lines, license, etc. — is never
+# touched. Substitute BOTH the upstream patterns and the current-claim
+# patterns to the new values; this handles first-claim, re-claim (changing
+# fork identity), and stale-README-only repair in one pass.
 if [[ -f "$README_MD" ]]; then
   CUR_WEB="${CURRENT_HOST}/${CURRENT_OWNER}/${CURRENT_REPO}"
   NEW_WEB="${NEW_HOST}/${NEW_OWNER}/${NEW_REPO}"
+  UP_WEB="${UPSTREAM_HOST}/${UPSTREAM_OWNER}/${UPSTREAM_REPO}"
 
-  if [[ "$CURRENT_HOST" == "github.com" ]]; then
-    CUR_RAW="raw.githubusercontent.com/${CURRENT_OWNER}/${CURRENT_REPO}"
-  else
-    CUR_RAW="${CURRENT_HOST}/raw/${CURRENT_OWNER}/${CURRENT_REPO}"
-  fi
-  if [[ "$NEW_HOST" == "github.com" ]]; then
-    NEW_RAW="raw.githubusercontent.com/${NEW_OWNER}/${NEW_REPO}"
-  else
-    NEW_RAW="${NEW_HOST}/raw/${NEW_OWNER}/${NEW_REPO}"
-  fi
+  raw_for_host() {
+    if [[ "$1" == "github.com" ]]; then
+      printf 'raw.githubusercontent.com/%s/%s' "$2" "$3"
+    else
+      printf '%s/raw/%s/%s' "$1" "$2" "$3"
+    fi
+  }
+  CUR_RAW="$(raw_for_host "$CURRENT_HOST" "$CURRENT_OWNER" "$CURRENT_REPO")"
+  NEW_RAW="$(raw_for_host "$NEW_HOST" "$NEW_OWNER" "$NEW_REPO")"
+  UP_RAW="$(raw_for_host "$UPSTREAM_HOST" "$UPSTREAM_OWNER" "$UPSTREAM_REPO")"
 
   sed "${SED_INPLACE[@]}" \
+    -e "s|${UP_RAW}|${NEW_RAW}|g" \
+    -e "s|${UP_WEB}|${NEW_WEB}|g" \
     -e "s|${CUR_RAW}|${NEW_RAW}|g" \
     -e "s|${CUR_WEB}|${NEW_WEB}|g" \
     "$README_MD"
