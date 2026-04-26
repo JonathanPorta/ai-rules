@@ -102,12 +102,14 @@ Public repos may include:
 templates/styleguides/styleguides.example.yaml
 ```
 
-Example:
+Example (note the `.ai-rules/` prefix, per the Path Resolution section
+above — paths are resolved relative to the consuming repo root, where
+ai-rules lives at `.ai-rules/`):
 
 ```yaml
 styleguides:
   - name: example
-    path: templates/styleguides/example-voice-styleguide.md
+    path: .ai-rules/templates/styleguides/example-voice-styleguide.md
     required: false
 ```
 

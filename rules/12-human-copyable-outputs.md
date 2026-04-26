@@ -4,7 +4,8 @@ When generating text intended to be pasted into another tool, write the
 output to a temporary file and provide a clipboard command for the human
 to run.
 
-Do not automatically copy to the clipboard unless explicitly asked.
+Do not automatically copy to the clipboard. Write the file and provide
+a clipboard command for the human to run.
 
 Do not automatically submit, post, publish, push, open PRs, or send messages.
 

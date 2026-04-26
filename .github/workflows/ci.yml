@@ -26,7 +26,10 @@ jobs:
           exit "$fail"
 
       - name: ShellCheck
-        uses: ludeeus/action-shellcheck@master
+        # Pinned to the v2.0.0 release SHA. This repo's whole point is
+        # making AI-assisted dev safer; mutable @master refs are exactly
+        # the supply-chain shape we don't want here.
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38
         with:
           severity: warning
           scandir: '.'

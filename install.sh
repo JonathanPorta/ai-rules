@@ -81,6 +81,25 @@ info()  { echo -e "${GREEN}[ai-rules]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[ai-rules]${NC} $*"; }
 error() { echo -e "${RED}[ai-rules]${NC} $*" >&2; }
 
+# Idempotently ensure the consuming repo's root .gitignore protects
+# private styleguide overlays (the .ai-local/ convention). Called from
+# every success path so existing repos pick up the entry on update,
+# not only on fresh install.
+ensure_ai_local_gitignore() {
+  local marker="# ai-rules-local-config"
+  if [[ -f .gitignore ]] && grep -qF "$marker" .gitignore; then
+    return 0
+  fi
+  {
+    if [[ -f .gitignore ]] && [[ -n "$(tail -c 1 .gitignore)" ]]; then
+      echo ""
+    fi
+    echo "$marker"
+    echo ".ai-local/"
+  } >> .gitignore
+  info "Added .ai-local/ to .gitignore (private styleguide overlays)."
+}
+
 # -------------------------------------------------------------------
 # Preflight checks
 # -------------------------------------------------------------------
@@ -161,17 +180,7 @@ if [[ ! -d "$PREFIX" ]]; then
   info "Installing ai-rules ${LATEST_TAG}..."
   git subtree add --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
 
-  # Idempotently ensure the consuming repo's root .gitignore protects
-  # private styleguide overlays (the .ai-local/ convention).
-  GITIGNORE_MARKER="# ai-rules-local-config"
-  if [[ ! -f .gitignore ]] || ! grep -qF "$GITIGNORE_MARKER" .gitignore; then
-    {
-      [[ -f .gitignore ]] && tail -c 1 .gitignore | grep -qE $'^[^\n]?$' && echo ""
-      echo "$GITIGNORE_MARKER"
-      echo ".ai-local/"
-    } >> .gitignore
-    info "Added .ai-local/ to .gitignore (private styleguide overlays)."
-  fi
+  ensure_ai_local_gitignore
 
   info "Installation complete."
   info ""
@@ -198,11 +207,14 @@ elif [[ -f "$VERSION_FILE" ]]; then
 
   if [[ "$INSTALLED_TAG" == "$LATEST_TAG" ]]; then
     info "Already up to date at ${LATEST_TAG}."
+    ensure_ai_local_gitignore
     exit 0
   fi
 
   info "Updating ai-rules from ${INSTALLED_TAG} to ${LATEST_TAG}..."
   git subtree pull --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+
+  ensure_ai_local_gitignore
 
   info "Update complete: ${INSTALLED_TAG} → ${LATEST_TAG}"
 

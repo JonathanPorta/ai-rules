@@ -299,9 +299,11 @@ understand the flow and state model that screen belongs to.**
 
 ## Optional Rules
 
-Some rules are opt-in. They live in the repo but are disabled by default.
-To enable an optional rule, edit `AGENTS.md` and move it from the "Available"
-list to the "Enabled" list under the Optional Rules section.
+Some rules are opt-in. Whether each one is active is controlled by the
+**Available** and **Enabled** lists under the Optional Rules section of
+`AGENTS.md`. To turn a rule on, move it from Available to Enabled (or
+vice versa to turn one off). This repo enables a couple by default;
+forks can override.
 
 | Rule | What It Does | Enable When |
 |------|-------------|-------------|
