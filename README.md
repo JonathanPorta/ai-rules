@@ -157,6 +157,7 @@ tool access:
   AGENTS.md                        # Entry point and core principles
   setup.sh                         # Platform stub generator
   install.sh                       # curl|bash installer
+  claim-fork.sh                    # One-shot interactive fork-claim helper
   docs/
     overview.md                    # Why the framework exists and what it covers
     how-to-use.md                  # Recommended workflow by task type
@@ -298,6 +299,37 @@ list to the "Enabled" list under the Optional Rules section.
 
 Optional rules also come with supporting tooling in `scripts/`:
 - `tdd-check.sh` — compares git timestamps to verify test-before-implementation ordering
+
+## Forking
+
+To run a fork of these rules for your organization (including a GitHub
+Enterprise instance):
+
+1. Fork on GitHub (or create the equivalent repo on your GHE host) and
+   clone it locally.
+2. Run `./claim-fork.sh` from the repo root. It detects your clone's
+   git origin, walks you through replacing the host/owner/repo in
+   `install.sh` and the README, and offers to commit the result.
+3. Push.
+
+`claim-fork.sh` is interactive, idempotent (re-running on an
+already-claimed fork is a no-op), and supports both `github.com` and
+GHE hosts. Use `--dry-run` to preview without writing files.
+
+After step 3, the curl one-liner against your fork installs from your
+fork — no further edits to `install.sh` needed.
+
+To install from a fork *without* forking yourself, override at the call
+site:
+
+```bash
+AI_RULES_HOST=github.com AI_RULES_OWNER=alice AI_RULES_REPO=ai-rules-fork \
+  curl -fsSL https://raw.githubusercontent.com/alice/ai-rules-fork/main/install.sh | bash
+```
+
+For GHE, point `AI_RULES_HOST` at your enterprise host
+(e.g., `github.acme.corp`) and use the equivalent `${HOST}/raw/...`
+URL for the curl source.
 
 ## Extending for Your Organization
 

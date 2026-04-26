@@ -12,9 +12,54 @@ set -euo pipefail
 #   - If .ai-rules/ exists but isn't ours: abort with warning
 #
 
-REPO="https://github.com/JonathanPorta/ai-rules.git"
-REPO_API="https://api.github.com/repos/JonathanPorta/ai-rules/releases/latest"
-ORIGIN_URL="https://github.com/JonathanPorta/ai-rules"
+# DEFAULT_HOST, DEFAULT_OWNER, DEFAULT_REPO point at the upstream repo this
+# script was distributed from. Forks rewrite these locally by running
+# claim-fork.sh once after cloning; see README's "Forking" section.
+DEFAULT_HOST="github.com"
+DEFAULT_OWNER="JonathanPorta"
+DEFAULT_REPO="ai-rules"
+
+# Runtime override via env vars; otherwise the stamped defaults above.
+HOST="${AI_RULES_HOST:-$DEFAULT_HOST}"
+OWNER="${AI_RULES_OWNER:-$DEFAULT_OWNER}"
+REPO_NAME="${AI_RULES_REPO:-$DEFAULT_REPO}"
+
+# Clone-mode auto-detect: if install.sh is being executed from a file inside
+# what looks like an ai-rules checkout (has setup.sh + AGENTS.md as sentinels),
+# derive HOST/OWNER/REPO_NAME from that clone's git origin. Skipped under
+# curl|bash because BASH_SOURCE[0] is not a real file path in that flow.
+if [[ -z "${AI_RULES_HOST:-}" && -z "${AI_RULES_OWNER:-}" && -z "${AI_RULES_REPO:-}" \
+      && -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+  _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "$_script_dir/setup.sh" && -f "$_script_dir/AGENTS.md" ]]; then
+    _detected="$(git -C "$_script_dir" config --get remote.origin.url 2>/dev/null || true)"
+    if [[ "$_detected" =~ ^https?://([^/]+)/([^/]+)/([^/]+)$ ]]; then
+      HOST="${BASH_REMATCH[1]}"
+      OWNER="${BASH_REMATCH[2]}"
+      REPO_NAME="${BASH_REMATCH[3]%.git}"
+    elif [[ "$_detected" =~ ^git@([^:]+):([^/]+)/([^/]+)$ ]]; then
+      HOST="${BASH_REMATCH[1]}"
+      OWNER="${BASH_REMATCH[2]}"
+      REPO_NAME="${BASH_REMATCH[3]%.git}"
+    fi
+    unset _detected
+  fi
+  unset _script_dir
+fi
+
+# Derive the three URL bases from HOST. github.com uses dedicated subdomains
+# for the API and raw content; GitHub Enterprise serves both under the same
+# host (api/v3 and /raw paths).
+if [[ "$HOST" == "github.com" ]]; then
+  API_BASE="https://api.github.com"
+else
+  API_BASE="https://${HOST}/api/v3"
+fi
+WEB_BASE="https://${HOST}"
+
+REPO="${WEB_BASE}/${OWNER}/${REPO_NAME}.git"
+REPO_API="${API_BASE}/repos/${OWNER}/${REPO_NAME}/releases/latest"
+ORIGIN_URL="${WEB_BASE}/${OWNER}/${REPO_NAME}"
 PREFIX=".ai-rules"
 VERSION_FILE="${PREFIX}/.version"
 
