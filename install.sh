@@ -90,6 +90,10 @@ ensure_ai_local_gitignore() {
   if [[ -f .gitignore ]] && grep -qF "$marker" .gitignore; then
     return 0
   fi
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] would add .ai-local/ to .gitignore (private styleguide overlays)."
+    return 0
+  fi
   {
     if [[ -f .gitignore ]] && [[ -n "$(tail -c 1 .gitignore)" ]]; then
       echo ""
@@ -99,6 +103,57 @@ ensure_ai_local_gitignore() {
   } >> .gitignore
   info "Added .ai-local/ to .gitignore (private styleguide overlays)."
 }
+
+usage() {
+  local exit_code="${1:-0}"
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Install or update ai-rules in the current repository via git subtree.
+
+Options:
+  --dry-run     Preview the action without making any changes.
+  -h, --help    Show this help message.
+
+Behavior:
+  - If ${PREFIX}/ doesn't exist: git subtree add from the latest release tag.
+  - If ${PREFIX}/ exists and is from this origin: git subtree pull to the
+    latest release tag (or no-op if already up to date).
+  - If ${PREFIX}/ exists from a different origin: abort with a warning.
+
+Environment variable overrides (each falls back to the stamped default):
+  AI_RULES_HOST    GitHub host (current default: ${DEFAULT_HOST})
+  AI_RULES_OWNER   Owner / org (current default: ${DEFAULT_OWNER})
+  AI_RULES_REPO    Repo name   (current default: ${DEFAULT_REPO})
+
+Examples:
+  $(basename "$0")                                # install or update
+  $(basename "$0") --dry-run                      # preview the action
+  curl -fsSL <url>/install.sh | bash -s -- --dry-run
+
+When run from a clone of an ai-rules fork (with setup.sh + AGENTS.md
+sentinels alongside), host/owner/repo are auto-detected from that
+clone's git origin. Only real-domain hosts are auto-detected; SSH
+aliases (e.g. 'gh-alt') are ignored in favor of stamped defaults.
+EOF
+  exit "$exit_code"
+}
+
+# Argument parsing
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --dry-run) DRY_RUN=true; shift ;;
+    -h|--help) usage 0 ;;
+    *) error "Unknown option: $1"; usage 1 ;;
+  esac
+done
+
+if [[ "$DRY_RUN" == true ]]; then
+  info "[dry-run] no remote-mutating commands will be executed."
+  info "[dry-run] resolved identity: ${HOST}/${OWNER}/${REPO_NAME}"
+fi
 
 # -------------------------------------------------------------------
 # Preflight checks
@@ -143,8 +198,12 @@ if ! git rev-parse HEAD &>/dev/null; then
   exit 1
 fi
 if ! git diff-index --quiet HEAD --; then
-  error "You have uncommitted changes. Commit or stash them before installing."
-  exit 1
+  if [[ "$DRY_RUN" == true ]]; then
+    warn "You have uncommitted changes. (Allowed under --dry-run; would block a real run.)"
+  else
+    error "You have uncommitted changes. Commit or stash them before installing."
+    exit 1
+  fi
 fi
 
 # -------------------------------------------------------------------
@@ -178,16 +237,24 @@ info "Latest release: ${LATEST_TAG}"
 if [[ ! -d "$PREFIX" ]]; then
   # Fresh install
   info "Installing ai-rules ${LATEST_TAG}..."
-  git subtree add --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] would run: git subtree add --prefix=${PREFIX} ${REPO} ${LATEST_TAG} --squash"
+  else
+    git subtree add --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+  fi
 
   ensure_ai_local_gitignore
 
-  info "Installation complete."
-  info ""
-  info "Next steps:"
-  info "  1. Run: ${PREFIX}/setup.sh --platforms cursor,windsurf,copilot"
-  info "  2. Commit the generated platform stubs"
-  info "  3. Read ${PREFIX}/AGENTS.md to understand the rules"
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] no actual changes were made."
+  else
+    info "Installation complete."
+    info ""
+    info "Next steps:"
+    info "  1. Run: ${PREFIX}/setup.sh --platforms cursor,windsurf,copilot"
+    info "  2. Commit the generated platform stubs"
+    info "  3. Read ${PREFIX}/AGENTS.md to understand the rules"
+  fi
 
 elif [[ -f "$VERSION_FILE" ]]; then
   # Directory exists — check if it's ours
@@ -212,11 +279,19 @@ elif [[ -f "$VERSION_FILE" ]]; then
   fi
 
   info "Updating ai-rules from ${INSTALLED_TAG} to ${LATEST_TAG}..."
-  git subtree pull --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] would run: git subtree pull --prefix=${PREFIX} ${REPO} ${LATEST_TAG} --squash"
+  else
+    git subtree pull --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+  fi
 
   ensure_ai_local_gitignore
 
-  info "Update complete: ${INSTALLED_TAG} → ${LATEST_TAG}"
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] no actual changes were made."
+  else
+    info "Update complete: ${INSTALLED_TAG} → ${LATEST_TAG}"
+  fi
 
 else
   # Directory exists but no .version file — not ours
