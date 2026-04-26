@@ -1,0 +1,28 @@
+# Example styleguides loader config.
+#
+# Copy this to .ai-local/styleguides.yaml (which is gitignored) and edit
+# the paths to point at your private styleguide files. Set required:true
+# for any styleguide you want the agent to ask about if missing.
+#
+# Paths are resolved relative to the consuming repository root (the
+# directory containing .git/ and .ai-rules/). See rules/11-styleguide-
+# overlays.md "Path Resolution" for the full rule.
+
+styleguides:
+  # Public example shipped via ai-rules. Note the .ai-rules/ prefix:
+  # this is the path that works in a consumer repo where ai-rules is
+  # installed as a subtree.
+  - name: example
+    path: .ai-rules/templates/styleguides/example-voice-styleguide.md
+    required: false
+
+  # Private overlay — uncomment and adjust the path after creating
+  # .ai-local/styleguides/voice.md.
+  # - name: voice
+  #   path: .ai-local/styleguides/voice.md
+  #   required: false
+
+  # Private work-context overlay.
+  # - name: work
+  #   path: .ai-local/styleguides/work-voice.md
+  #   required: false

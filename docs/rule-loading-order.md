@@ -23,6 +23,16 @@ For implementation work, load:
 - `rules/05-task-execution.md`
 - `rules/06-session-state.md`
 - `rules/07-command-surface.md`
+- `rules/09-git-and-publication-boundaries.md`
+- `rules/13-phase-gate-audits.md`
+
+Optional rules listed under `Optional Rules → Enabled` in `AGENTS.md` are
+loaded after the required set:
+
+- `rules/08-tdd-enforcement.md` (when enabled)
+- `rules/10-branch-pr-commit-conventions.md` (when enabled)
+- `rules/11-styleguide-overlays.md` (when enabled)
+- `rules/12-human-copyable-outputs.md` (enabled by default in this repo)
 
 ## 3. Domain rules when relevant
 

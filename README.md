@@ -174,6 +174,11 @@ tool access:
     06-session-state.md            # Persist context across sessions
     07-command-surface.md          # Required command and tool invocation boundaries
     08-tdd-enforcement.md          # (Optional) Red-then-green TDD evidence
+    09-git-and-publication-boundaries.md  # AI prepares; human ships
+    10-branch-pr-commit-conventions.md    # (Optional) git naming conventions
+    11-styleguide-overlays.md             # (Optional) private writing-style overlays
+    12-human-copyable-outputs.md          # (Optional, enabled by default) paste-ready /tmp/ai-* files
+    13-phase-gate-audits.md               # Audit before phase transitions and PR descriptions
     design/
       30-design-principles.md      # Design principles for coherent user-facing work
       31-ux-brief-and-intent.md    # User, job, emotional goal, constraints, success
@@ -208,6 +213,11 @@ tool access:
       windsurf.md                  # Windsurf stub (trigger: always_on)
       copilot.md                   # .github/copilot-instructions.md stub
       amp.md                       # Root AGENTS.md stub for Amp
+    styleguides/
+      README.md                    # Explains public/private styleguide split
+      example-voice-styleguide.md  # Generic public voice styleguide example
+      example-work-styleguide.md   # Generic public work-tone styleguide example
+      styleguides.example.yaml     # Loader config example for .ai-local/
   examples/
     sample-ux-brief.md             # Filled UX brief example
     sample-state-inventory.md      # Filled state inventory example
@@ -289,13 +299,18 @@ understand the flow and state model that screen belongs to.**
 
 ## Optional Rules
 
-Some rules are opt-in. They live in the repo but are disabled by default.
-To enable an optional rule, edit `AGENTS.md` and move it from the "Available"
-list to the "Enabled" list under the Optional Rules section.
+Some rules are opt-in. Whether each one is active is controlled by the
+**Available** and **Enabled** lists under the Optional Rules section of
+`AGENTS.md`. To turn a rule on, move it from Available to Enabled (or
+vice versa to turn one off). This repo enables a couple by default;
+forks can override.
 
 | Rule | What It Does | Enable When |
 |------|-------------|-------------|
 | [TDD Enforcement](rules/08-tdd-enforcement.md) | Requires red-then-green test evidence | Your team practices TDD and has test infrastructure |
+| [Branch, PR, and Commit Conventions](rules/10-branch-pr-commit-conventions.md) | Defines `{initials}/{type}/slug` branches, `type: Title Cased` PR titles, squash-merge default | You want consistent git naming across repos |
+| [Styleguide Overlays](rules/11-styleguide-overlays.md) | Loads optional private writing-style guidance from `.ai-local/` | You have a private voice or work styleguide and want the agent to apply it to prose |
+| [Human-Copyable Outputs](rules/12-human-copyable-outputs.md) | Writes PR descriptions, Slack posts, etc. to `/tmp/ai-*` files with a clipboard command instead of auto-publishing | You want a tangible draft to review before it lands in GitHub, Slack, or email (enabled by default) |
 
 Optional rules also come with supporting tooling in `scripts/`:
 - `tdd-check.sh` — compares git timestamps to verify test-before-implementation ordering

@@ -33,16 +33,25 @@ if [[ -z "${AI_RULES_HOST:-}" && -z "${AI_RULES_OWNER:-}" && -z "${AI_RULES_REPO
   _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   if [[ -f "$_script_dir/setup.sh" && -f "$_script_dir/AGENTS.md" ]]; then
     _detected="$(git -C "$_script_dir" config --get remote.origin.url 2>/dev/null || true)"
+    _parsed_host=""; _parsed_owner=""; _parsed_repo=""
     if [[ "$_detected" =~ ^https?://([^/]+)/([^/]+)/([^/]+)$ ]]; then
-      HOST="${BASH_REMATCH[1]}"
-      OWNER="${BASH_REMATCH[2]}"
-      REPO_NAME="${BASH_REMATCH[3]%.git}"
+      _parsed_host="${BASH_REMATCH[1]}"
+      _parsed_owner="${BASH_REMATCH[2]}"
+      _parsed_repo="${BASH_REMATCH[3]%.git}"
     elif [[ "$_detected" =~ ^git@([^:]+):([^/]+)/([^/]+)$ ]]; then
-      HOST="${BASH_REMATCH[1]}"
-      OWNER="${BASH_REMATCH[2]}"
-      REPO_NAME="${BASH_REMATCH[3]%.git}"
+      _parsed_host="${BASH_REMATCH[1]}"
+      _parsed_owner="${BASH_REMATCH[2]}"
+      _parsed_repo="${BASH_REMATCH[3]%.git}"
     fi
-    unset _detected
+    # Only adopt parsed values if the host looks like a real domain
+    # (contains a dot). SSH config aliases like "gh-alt" must not become
+    # API hosts — fall back to stamped defaults instead.
+    if [[ -n "$_parsed_host" && "$_parsed_host" == *.* ]]; then
+      HOST="$_parsed_host"
+      OWNER="$_parsed_owner"
+      REPO_NAME="$_parsed_repo"
+    fi
+    unset _detected _parsed_host _parsed_owner _parsed_repo
   fi
   unset _script_dir
 fi
@@ -71,6 +80,25 @@ NC='\033[0m' # No Color
 info()  { echo -e "${GREEN}[ai-rules]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[ai-rules]${NC} $*"; }
 error() { echo -e "${RED}[ai-rules]${NC} $*" >&2; }
+
+# Idempotently ensure the consuming repo's root .gitignore protects
+# private styleguide overlays (the .ai-local/ convention). Called from
+# every success path so existing repos pick up the entry on update,
+# not only on fresh install.
+ensure_ai_local_gitignore() {
+  local marker="# ai-rules-local-config"
+  if [[ -f .gitignore ]] && grep -qF "$marker" .gitignore; then
+    return 0
+  fi
+  {
+    if [[ -f .gitignore ]] && [[ -n "$(tail -c 1 .gitignore)" ]]; then
+      echo ""
+    fi
+    echo "$marker"
+    echo ".ai-local/"
+  } >> .gitignore
+  info "Added .ai-local/ to .gitignore (private styleguide overlays)."
+}
 
 # -------------------------------------------------------------------
 # Preflight checks
@@ -152,6 +180,8 @@ if [[ ! -d "$PREFIX" ]]; then
   info "Installing ai-rules ${LATEST_TAG}..."
   git subtree add --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
 
+  ensure_ai_local_gitignore
+
   info "Installation complete."
   info ""
   info "Next steps:"
@@ -177,11 +207,14 @@ elif [[ -f "$VERSION_FILE" ]]; then
 
   if [[ "$INSTALLED_TAG" == "$LATEST_TAG" ]]; then
     info "Already up to date at ${LATEST_TAG}."
+    ensure_ai_local_gitignore
     exit 0
   fi
 
   info "Updating ai-rules from ${INSTALLED_TAG} to ${LATEST_TAG}..."
   git subtree pull --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+
+  ensure_ai_local_gitignore
 
   info "Update complete: ${INSTALLED_TAG} → ${LATEST_TAG}"
 
