@@ -25,6 +25,10 @@ RULES_REL=".ai-rules"
 
 REFERENCE_MARKER="ai-rules-reference"
 
+# Used by usage() and the no-args path. Single source of truth so the
+# help text never drifts from the runtime default.
+DEFAULT_PLATFORMS="claude,copilot"
+
 # name|relative_path|template_filename|description
 # Keep in sync with templates/platform-stubs/ and README.md platform table.
 PLATFORMS_TABLE=(
@@ -48,14 +52,22 @@ Usage: $(basename "$0") [OPTIONS]
 Generate platform-specific config stubs that reference ${RULES_REL}/.
 
 Options:
-  --platforms <list>   Comma-separated platforms (see --list), or 'all'.
+  --platforms <list>   Comma-separated platforms, e.g. claude,copilot,cursor.
+                       Use 'all' for every supported platform, or run --list
+                       to see the full set. Defaults to: ${DEFAULT_PLATFORMS}.
   --list               List supported platforms and exit.
   --dry-run            Show what would happen without writing files.
+  --force              Overwrite existing stubs unconditionally — skips the
+                       reference-marker check and the YAML-frontmatter
+                       safety check. Use when you know you want to clobber
+                       whatever is at the target path.
   -h, --help           Show this help message.
 
 Examples:
-  $(basename "$0") --platforms cursor,windsurf
+  $(basename "$0")                                   # defaults to ${DEFAULT_PLATFORMS}
+  $(basename "$0") --platforms claude,copilot,cursor
   $(basename "$0") --platforms all
+  $(basename "$0") --platforms cursor --force        # rewrite Cursor stub
   $(basename "$0") --list
 EOF
   exit "$exit_code"
@@ -95,6 +107,7 @@ lookup_platform() {
 }
 
 DRY_RUN=false
+FORCE=false
 PLATFORMS=""
 
 while [[ $# -gt 0 ]]; do
@@ -107,15 +120,17 @@ while [[ $# -gt 0 ]]; do
       PLATFORMS="$2"; shift 2 ;;
     --list) list_platforms ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --force) FORCE=true; shift ;;
     -h|--help) usage 0 ;;
     *) echo "Unknown option: $1" >&2; usage 1 ;;
   esac
 done
 
 if [[ -z "$PLATFORMS" ]]; then
-  echo "Error: --platforms is required."
-  echo "Run with --list to see supported platforms, or --help for usage."
-  exit 1
+  PLATFORMS="$DEFAULT_PLATFORMS"
+  echo "No --platforms specified; defaulting to: $PLATFORMS"
+  echo "(Run --list for all supported platforms, or --help for usage.)"
+  echo ""
 fi
 
 if [[ "$PLATFORMS" == "all" ]]; then
@@ -147,6 +162,47 @@ write_stub() {
     return 0
   fi
 
+  # Refuse to write through anything that isn't a regular file. Catches
+  # directories, FIFOs, sockets, and broken symlinks at the target path
+  # — without this, `cp` would happily copy the template *into* a
+  # directory of the same name, and -f checks below would silently lie.
+  if [[ ( -e "$abs_path" || -L "$abs_path" ) && ! -f "$abs_path" ]]; then
+    echo "  [warn]   $rel_path — target exists but is not a regular file; skipping." >&2
+    echo "           Remove or rename it before re-running setup." >&2
+    COUNT_WARN=$((COUNT_WARN + 1))
+    return 0
+  fi
+
+  # --force path: clobber whatever is at the target with the template, no
+  # reference-marker check, no frontmatter safety. Use when you know you
+  # want to refresh the stub (template body changed, etc.).
+  if [[ "$FORCE" == true ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      if [[ -f "$abs_path" ]]; then
+        echo "  [dry-run] would overwrite $rel_path ($platform, --force)"
+        COUNT_UPDATE=$((COUNT_UPDATE + 1))
+      else
+        echo "  [dry-run] would create $rel_path ($platform)"
+        COUNT_CREATE=$((COUNT_CREATE + 1))
+      fi
+      return 0
+    fi
+    mkdir -p "$(dirname "$abs_path")"
+    local existed=false
+    [[ -f "$abs_path" ]] && existed=true
+    if [[ "$existed" == true ]]; then
+      # Preserve target's inode and mode by writing through a redirect.
+      cat "$template_file" > "$abs_path"
+      echo "  [force]  $rel_path — overwrote existing file"
+      COUNT_UPDATE=$((COUNT_UPDATE + 1))
+    else
+      cp "$template_file" "$abs_path"
+      echo "  [create] $rel_path"
+      COUNT_CREATE=$((COUNT_CREATE + 1))
+    fi
+    return 0
+  fi
+
   if has_reference "$abs_path"; then
     echo "  [skip]   $rel_path — already has ai-rules reference"
     COUNT_SKIP=$((COUNT_SKIP + 1))
@@ -155,8 +211,8 @@ write_stub() {
 
   if [[ -f "$abs_path" ]] && has_frontmatter "$abs_path"; then
     echo "  [warn]   $rel_path — existing file has YAML frontmatter; cannot safely prepend." >&2
-    echo "           Add '<!-- $REFERENCE_MARKER -->' manually after the frontmatter, or" >&2
-    echo "           remove the file to regenerate from the template." >&2
+    echo "           Add '<!-- $REFERENCE_MARKER -->' manually after the frontmatter," >&2
+    echo "           remove the file to regenerate, or re-run with --force to overwrite." >&2
     COUNT_WARN=$((COUNT_WARN + 1))
     return 0
   fi
