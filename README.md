@@ -88,11 +88,17 @@ cp -r ai-rules/ /path/to/your/project/.ai-rules/
 After installing, generate platform-specific config stubs:
 
 ```bash
-# Wire up for specific platforms
+# Use the defaults (claude + copilot)
+.ai-rules/setup.sh
+
+# Wire up specific platforms
 .ai-rules/setup.sh --platforms cursor,windsurf,copilot
 
-# Wire up for all supported platforms
+# Wire up every supported platform
 .ai-rules/setup.sh --platforms all
+
+# Overwrite an existing stub (skips the marker / frontmatter safety checks)
+.ai-rules/setup.sh --platforms cursor --force
 
 # See what's supported
 .ai-rules/setup.sh --list
