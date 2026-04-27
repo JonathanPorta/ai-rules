@@ -64,12 +64,17 @@ jobs:
       - name: setup.sh smoke test (--help, --list)
         run: |
           set -euo pipefail
-          ./setup.sh --help | grep -q "Usage:"
-          ./setup.sh --help | grep -q -- "--force"
-          ./setup.sh --help | grep -qE "Defaults to:.*claude,copilot"
-          ./setup.sh --list | grep -q "claude"
-          ./setup.sh --list | grep -q "copilot"
-          ./setup.sh --list | grep -q "cursor"
+          # Capture output first, then grep — avoids SIGPIPE on setup.sh's
+          # printf loop when `grep -q` exits early on the first match
+          # (combined with pipefail, that would propagate non-zero).
+          help_out=$(./setup.sh --help)
+          echo "$help_out" | grep -q "Usage:"
+          echo "$help_out" | grep -q -- "--force"
+          echo "$help_out" | grep -qE "Defaults to:.*claude,copilot"
+          list_out=$(./setup.sh --list)
+          echo "$list_out" | grep -q "claude"
+          echo "$list_out" | grep -q "copilot"
+          echo "$list_out" | grep -q "cursor"
 
       - name: setup.sh smoke test (no-args defaults to claude,copilot)
         run: |
