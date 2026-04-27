@@ -30,8 +30,20 @@ REPO_NAME="${AI_RULES_REPO:-$DEFAULT_REPO}"
 # curl|bash because BASH_SOURCE[0] is not a real file path in that flow.
 if [[ -z "${AI_RULES_HOST:-}" && -z "${AI_RULES_OWNER:-}" && -z "${AI_RULES_REPO:-}" \
       && -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
-  _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  if [[ -f "$_script_dir/setup.sh" && -f "$_script_dir/AGENTS.md" ]]; then
+  # `pwd -P` gives the physical path; matches what git rev-parse returns,
+  # which is necessary on macOS where /tmp -> /private/tmp and similar
+  # symlinks would otherwise make the toplevel-equality check below miss.
+  _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  # Only adopt the script-dir's git origin when this directory is the
+  # toplevel of its own git repo — i.e. install.sh is being run from an
+  # actual clone of ai-rules. For subtree installs (where .ai-rules/
+  # lives *inside* a consumer repo), git would walk up to the consumer's
+  # config and we'd build an API URL pointing at the wrong repo (e.g.
+  # api.github.com/repos/<consumer-owner>/<consumer-repo>/releases/latest,
+  # which 404s). The toplevel-equality check rejects that case cleanly.
+  _script_toplevel="$(git -C "$_script_dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -f "$_script_dir/setup.sh" && -f "$_script_dir/AGENTS.md" \
+        && -n "$_script_toplevel" && "$_script_toplevel" == "$_script_dir" ]]; then
     _detected="$(git -C "$_script_dir" config --get remote.origin.url 2>/dev/null || true)"
     _parsed_host=""; _parsed_owner=""; _parsed_repo=""
     if [[ "$_detected" =~ ^https?://([^/]+)/([^/]+)/([^/]+)$ ]]; then
@@ -53,7 +65,7 @@ if [[ -z "${AI_RULES_HOST:-}" && -z "${AI_RULES_OWNER:-}" && -z "${AI_RULES_REPO
     fi
     unset _detected _parsed_host _parsed_owner _parsed_repo
   fi
-  unset _script_dir
+  unset _script_dir _script_toplevel
 fi
 
 # Derive the three URL bases from HOST. github.com uses dedicated subdomains
