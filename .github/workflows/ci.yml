@@ -60,3 +60,174 @@ jobs:
           # Accept all parsed defaults via empty newlines; --dry-run exits
           # before any mutation, so this should always succeed.
           printf '\n\n\n' | ./claim-fork.sh --dry-run
+
+      - name: setup.sh smoke test (--help, --list)
+        run: |
+          set -euo pipefail
+          ./setup.sh --help | grep -q "Usage:"
+          ./setup.sh --help | grep -q -- "--force"
+          ./setup.sh --help | grep -qE "Defaults to:.*claude,copilot"
+          ./setup.sh --list | grep -q "claude"
+          ./setup.sh --list | grep -q "copilot"
+          ./setup.sh --list | grep -q "cursor"
+
+      - name: setup.sh smoke test (no-args defaults to claude,copilot)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          out=$("$tmp/.ai-rules/setup.sh" --dry-run 2>&1)
+          echo "$out" | grep -q "defaulting to: claude,copilot"
+          echo "$out" | grep -q "would create CLAUDE.md"
+          echo "$out" | grep -q "would create .github/copilot-instructions.md"
+          # Dry-run must not have created either file
+          [[ ! -e "$tmp/CLAUDE.md" ]]
+          [[ ! -e "$tmp/.github/copilot-instructions.md" ]]
+
+      - name: setup.sh smoke test (--force overwrites existing stub)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          mkdir -p .cursor/rules
+          {
+            echo '<!-- ai-rules-reference -->'
+            echo 'do not overwrite without --force'
+          } > .cursor/rules/ai-rules.mdc
+          # Without --force: skip existing
+          out=$("$tmp/.ai-rules/setup.sh" --platforms cursor 2>&1)
+          echo "$out" | grep -q "already has ai-rules reference"
+          grep -q "do not overwrite without --force" .cursor/rules/ai-rules.mdc
+          # With --force: overwrite with template
+          "$tmp/.ai-rules/setup.sh" --platforms cursor --force >/dev/null
+          grep -q "alwaysApply: true" .cursor/rules/ai-rules.mdc
+
+      - name: setup.sh smoke test (--force --dry-run does not write)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          mkdir -p .cursor/rules
+          echo "manual content do not touch" > .cursor/rules/ai-rules.mdc
+          out=$("$tmp/.ai-rules/setup.sh" --platforms cursor --force --dry-run 2>&1)
+          echo "$out" | grep -q "would overwrite"
+          # File unchanged
+          grep -q "manual content do not touch" .cursor/rules/ai-rules.mdc
+
+      - name: setup.sh smoke test (non-regular target file is guarded)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          # Target is a directory, not a regular file
+          mkdir CLAUDE.md
+          out=$("$tmp/.ai-rules/setup.sh" --platforms claude 2>&1)
+          echo "$out" | grep -q "not a regular file"
+          # Even with --force, the guard must hold
+          out=$("$tmp/.ai-rules/setup.sh" --platforms claude --force 2>&1)
+          echo "$out" | grep -q "not a regular file"
+          # Directory was never clobbered
+          [[ -d CLAUDE.md ]]
+
+      # install.sh resolves HOST/OWNER/REPO_NAME at the top of the file,
+      # before any preflight or network call. Each test below sets up a
+      # repo that triggers the "uncommitted changes" preflight to exit
+      # install.sh quickly — the bash -x trace captures the resolved
+      # variables before that exit, which is all these tests assert on.
+      - name: install.sh smoke test (subtree install falls back to defaults)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          git config user.email ci@example.com
+          git config user.name CI
+          git remote add origin https://github.com/some-consumer/some-app.git
+          # Tracked-then-modified file → install.sh exits at preflight
+          echo a > tracked.txt
+          git add tracked.txt
+          git commit -q -m init
+          echo b >> tracked.txt
+          # Subtree-style layout
+          mkdir -p .ai-rules
+          cp install.sh .ai-rules/install.sh 2>/dev/null || cp "$GITHUB_WORKSPACE/install.sh" .ai-rules/install.sh
+          chmod +x .ai-rules/install.sh
+          touch .ai-rules/setup.sh .ai-rules/AGENTS.md
+          trace=$(bash -x ./.ai-rules/install.sh 2>&1 | grep -E "^\+ (HOST|OWNER|REPO_NAME)=" || true)
+          echo "$trace"
+          final_owner=$(echo "$trace" | grep "^\+ OWNER=" | tail -1)
+          final_repo=$(echo "$trace" | grep "^\+ REPO_NAME=" | tail -1)
+          [[ "$final_owner" == *"OWNER=JonathanPorta"* ]] || { echo "FAIL: subtree leaked owner: $final_owner"; exit 1; }
+          [[ "$final_repo" == *"REPO_NAME=ai-rules"* ]] || { echo "FAIL: subtree leaked repo: $final_repo"; exit 1; }
+
+      - name: install.sh smoke test (direct clone auto-detects fork identity)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          # Fake fork at $tmp/fork
+          cp -R . "$tmp/fork"
+          cd "$tmp/fork"
+          rm -rf .git
+          git init -q
+          git config user.email ci@example.com
+          git config user.name CI
+          git remote add origin https://github.com/alice/ai-rules-fork.git
+          git add . >/dev/null
+          git commit -q -m init
+          # Run install.sh from a separate dirty consumer
+          mkdir -p "$tmp/consumer" && cd "$tmp/consumer"
+          git init -q
+          git config user.email ci@example.com
+          git config user.name CI
+          echo a > tracked.txt
+          git add tracked.txt
+          git commit -q -m init
+          echo b >> tracked.txt
+          trace=$(bash -x "$tmp/fork/install.sh" 2>&1 | grep -E "^\+ (HOST|OWNER|REPO_NAME)=" || true)
+          echo "$trace"
+          final_owner=$(echo "$trace" | grep "^\+ OWNER=" | tail -1)
+          final_repo=$(echo "$trace" | grep "^\+ REPO_NAME=" | tail -1)
+          [[ "$final_owner" == *"OWNER=alice"* ]] || { echo "FAIL: direct-clone did not auto-detect: $final_owner"; exit 1; }
+          [[ "$final_repo" == *"REPO_NAME=ai-rules-fork"* ]] || { echo "FAIL: direct-clone repo wrong: $final_repo"; exit 1; }
+
+      - name: install.sh smoke test (SSH alias falls back to defaults)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cp -R . "$tmp/fork"
+          cd "$tmp/fork"
+          rm -rf .git
+          git init -q
+          git config user.email ci@example.com
+          git config user.name CI
+          # SSH alias-style remote (host without a dot)
+          git remote add origin git@gh-alt:foo/bar.git
+          git add . >/dev/null
+          git commit -q -m init
+          mkdir -p "$tmp/consumer" && cd "$tmp/consumer"
+          git init -q
+          git config user.email ci@example.com
+          git config user.name CI
+          echo a > tracked.txt
+          git add tracked.txt
+          git commit -q -m init
+          echo b >> tracked.txt
+          trace=$(bash -x "$tmp/fork/install.sh" 2>&1 | grep -E "^\+ OWNER=" || true)
+          echo "$trace"
+          final_owner=$(echo "$trace" | grep "^\+ OWNER=" | tail -1)
+          [[ "$final_owner" == *"OWNER=JonathanPorta"* ]] || { echo "FAIL: SSH alias leaked: $final_owner"; exit 1; }
