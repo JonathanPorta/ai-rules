@@ -292,6 +292,24 @@ write_stub() {
   fi
 }
 
+# Create a relative symlink, emitting an actionable warning if the
+# filesystem rejects it (Windows without dev-mode, locked-down sandboxes,
+# etc.) instead of aborting all of setup via set -e. Returns 0 on success,
+# 1 on failure — the caller decides whether to log a success line.
+create_skill_symlink() {
+  local link_target="$1" target_link="$2" rel_target="$3"
+  if ! ln -s "$link_target" "$target_link" 2>/dev/null; then
+    echo "  [warn]   $rel_target — failed to create symlink." >&2
+    echo "           Your filesystem or OS may not support symlinks." >&2
+    echo "           Re-run with --no-skills, enable symlink support, or" >&2
+    echo "           create the link manually:" >&2
+    echo "             $rel_target -> $link_target" >&2
+    COUNT_WARN=$((COUNT_WARN + 1))
+    return 1
+  fi
+  return 0
+}
+
 # Wire each skill folder under .ai-rules/skills/ into a platform's native
 # discovery directory via relative symlinks. Idempotent: existing correct
 # symlinks are left alone; foreign content at the target path triggers a
@@ -340,9 +358,10 @@ wire_skills_for_platform() {
         continue
       fi
       rm -f "$target_link"
-      ln -s "$link_target" "$target_link"
-      echo "  [update] $rel_target — retargeted symlink"
-      COUNT_UPDATE=$((COUNT_UPDATE + 1))
+      if create_skill_symlink "$link_target" "$target_link" "$rel_target"; then
+        echo "  [update] $rel_target — retargeted symlink"
+        COUNT_UPDATE=$((COUNT_UPDATE + 1))
+      fi
       continue
     fi
 
@@ -359,9 +378,10 @@ wire_skills_for_platform() {
       fi
       mkdir -p "$target_abs"
       rm -rf "$target_link"
-      ln -s "$link_target" "$target_link"
-      echo "  [force]  $rel_target — replaced with symlink"
-      COUNT_UPDATE=$((COUNT_UPDATE + 1))
+      if create_skill_symlink "$link_target" "$target_link" "$rel_target"; then
+        echo "  [force]  $rel_target — replaced with symlink"
+        COUNT_UPDATE=$((COUNT_UPDATE + 1))
+      fi
       continue
     fi
 
@@ -371,9 +391,10 @@ wire_skills_for_platform() {
       continue
     fi
     mkdir -p "$target_abs"
-    ln -s "$link_target" "$target_link"
-    echo "  [link]   $rel_target -> $link_target"
-    COUNT_CREATE=$((COUNT_CREATE + 1))
+    if create_skill_symlink "$link_target" "$target_link" "$rel_target"; then
+      echo "  [link]   $rel_target -> $link_target"
+      COUNT_CREATE=$((COUNT_CREATE + 1))
+    fi
   done
 }
 

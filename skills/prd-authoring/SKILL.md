@@ -1,7 +1,7 @@
 ---
 name: prd-authoring
 description: Generate a Product Requirements Document for a feature request, bug report, product change, or other multi-step engineering work. Use when the human asks to plan a feature, write a PRD, define acceptance criteria, or analyze a codebase before implementation. Stops at acceptance-criteria approval — does not implement code.
-allowed-tools: Read, Grep, Glob, Bash
+allowed-tools: Read, Grep, Glob
 model: opus
 ---
 
