@@ -70,11 +70,17 @@ jobs:
           help_out=$(./setup.sh --help)
           echo "$help_out" | grep -q "Usage:"
           echo "$help_out" | grep -q -- "--force"
+          echo "$help_out" | grep -q -- "--no-skills"
           echo "$help_out" | grep -qE "Defaults to:.*claude,copilot"
           list_out=$(./setup.sh --list)
           echo "$list_out" | grep -q "claude"
           echo "$list_out" | grep -q "copilot"
           echo "$list_out" | grep -q "cursor"
+          # Skill-wiring annotation per platform
+          echo "$list_out" | grep -q "skills: native at .claude/skills/"
+          echo "$list_out" | grep -q "skills: native at .windsurf/skills/"
+          echo "$list_out" | grep -q "skills: native at .github/skills/"
+          echo "$list_out" | grep -q "skills: reference only"
 
       - name: setup.sh smoke test (no-args defaults to claude,copilot)
         run: |
@@ -145,6 +151,99 @@ jobs:
           echo "$out" | grep -q "not a regular file"
           # Directory was never clobbered
           [[ -d CLAUDE.md ]]
+
+      - name: setup.sh smoke test (native-skills wiring creates symlinks)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          "$tmp/.ai-rules/setup.sh" --platforms all >/dev/null
+          # Three native-skills platforms get a relative symlink per skill
+          for target in .claude/skills/prd-authoring \
+                        .windsurf/skills/prd-authoring \
+                        .github/skills/prd-authoring; do
+            [[ -L "$target" ]] || { echo "FAIL: $target is not a symlink"; exit 1; }
+            link="$(readlink "$target")"
+            [[ "$link" == "../../.ai-rules/skills/prd-authoring" ]] || \
+              { echo "FAIL: $target -> $link (expected ../../.ai-rules/skills/prd-authoring)"; exit 1; }
+            # And resolves to a real directory containing SKILL.md
+            [[ -f "$target/SKILL.md" ]] || { echo "FAIL: $target/SKILL.md not resolvable"; exit 1; }
+          done
+          # Reference-only platforms get no symlinks; their stubs carry the reference text
+          [[ ! -e .cursor/skills ]] || { echo "FAIL: cursor got a skills directory"; exit 1; }
+          grep -qF ".ai-rules/skills/" .cursor/rules/ai-rules.mdc
+          grep -qF ".ai-rules/skills/" AGENTS.md
+
+      - name: setup.sh smoke test (--no-skills suppresses wiring)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          "$tmp/.ai-rules/setup.sh" --platforms claude --no-skills >/dev/null
+          # Stub still created
+          [[ -f CLAUDE.md ]] || { echo "FAIL: CLAUDE.md not created"; exit 1; }
+          # No skills directory created
+          [[ ! -e .claude/skills ]] || { echo "FAIL: --no-skills did not suppress wiring"; exit 1; }
+
+      - name: setup.sh smoke test (skills wiring is idempotent)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          "$tmp/.ai-rules/setup.sh" --platforms claude >/dev/null
+          out=$("$tmp/.ai-rules/setup.sh" --platforms claude 2>&1)
+          echo "$out" | grep -q "symlink already correct"
+          # Symlink unchanged
+          [[ -L .claude/skills/prd-authoring ]]
+          link="$(readlink .claude/skills/prd-authoring)"
+          [[ "$link" == "../../.ai-rules/skills/prd-authoring" ]]
+
+      - name: setup.sh smoke test (skills --dry-run does not write)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          out=$("$tmp/.ai-rules/setup.sh" --platforms claude --dry-run 2>&1)
+          echo "$out" | grep -q "would link .claude/skills/prd-authoring"
+          # Nothing on disk
+          [[ ! -e .claude/skills ]] || { echo "FAIL: dry-run created skills dir"; exit 1; }
+          [[ ! -e CLAUDE.md ]] || { echo "FAIL: dry-run created stub"; exit 1; }
+
+      - name: setup.sh smoke test (foreign content at skill target is guarded)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          # Pre-populate a real directory at the skill target — user content
+          mkdir -p .claude/skills/prd-authoring
+          echo "user notes" > .claude/skills/prd-authoring/notes.md
+          # Without --force: warn, leave it alone
+          out=$("$tmp/.ai-rules/setup.sh" --platforms claude 2>&1)
+          echo "$out" | grep -q "non-symlink path exists; use --force to replace"
+          [[ -d .claude/skills/prd-authoring && ! -L .claude/skills/prd-authoring ]] || \
+            { echo "FAIL: directory was clobbered without --force"; exit 1; }
+          [[ -f .claude/skills/prd-authoring/notes.md ]] || \
+            { echo "FAIL: user content was lost"; exit 1; }
+          # With --force: replace with the symlink
+          "$tmp/.ai-rules/setup.sh" --platforms claude --force >/dev/null
+          [[ -L .claude/skills/prd-authoring ]] || { echo "FAIL: --force did not convert to symlink"; exit 1; }
+          link="$(readlink .claude/skills/prd-authoring)"
+          [[ "$link" == "../../.ai-rules/skills/prd-authoring" ]]
 
       # install.sh resolves HOST/OWNER/REPO_NAME at the top of the file,
       # before any preflight or network call. Each test below sets up a
