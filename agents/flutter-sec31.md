@@ -108,7 +108,7 @@ Search for these strings anywhere in source, configs, lockfiles, vendored assets
 - `mautic.findes.com.br`
 - `mlinvoice.turkupride.fi`
 
-This is a curated subset. The campaign uses a large, rotating set of C2, distribution, and ad-fraud domains; treat the maltrail feed above as the authoritative full list and reconcile against it. Subdomains layered onto otherwise-legitimate hosts (for example `mautic.findes.com.br`, `mlinvoice.turkupride.fi`) suggest staging on compromised infrastructure — call this pattern out explicitly.
+This is a curated subset. The campaign uses a large, rotating set of C2, distribution, and ad-fraud domains; treat the maltrail feed listed under **Background → Authoritative references** (`stamparm/maltrail` `osx_fluttershell.txt`) as the authoritative full list and reconcile against it. Subdomains layered onto otherwise-legitimate hosts (for example `mautic.findes.com.br`, `mlinvoice.turkupride.fi`) suggest staging on compromised infrastructure — call this pattern out explicitly.
 
 ### 3) Flutter/Dart payload and staging patterns
 Inspect Dart sources, build hooks, and bundle contents for:
@@ -245,7 +245,7 @@ Follow these steps in order:
 - Read first, then execute minimal inspection commands.
 - Distinguish compromise from exposure risk.
 - Hash nested bundle contents; do not trust a top-level hash alone.
-- Treat the maltrail feed as the authoritative indicator list and reconcile against it when possible.
+- Treat the maltrail feed listed under **Background → Authoritative references** (`stamparm/maltrail` `osx_fluttershell.txt`) as the authoritative indicator list and reconcile against it when possible.
 - Do not declare an artifact safe merely because a manifest omits it; check lockfiles, bundles, and snapshots too.
 - Do not silently broaden scope to generic malware hunting until FlutterShell checks are complete.
 - Do not modify the repository.
