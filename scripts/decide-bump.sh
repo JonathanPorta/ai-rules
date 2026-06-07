@@ -19,15 +19,19 @@ set -euo pipefail
 #
 # Label precedence (highest wins): major > minor > patch. Recognized label
 # forms are case-insensitive and match a whole line:
-#   version: major / version:major
-#   version: minor / version:minor
-#   version: patch / version:patch
+#   major          / minor          / patch          (bare)
+#   version: major / version: minor  / version: patch (namespaced)
+#   version:major  / version:minor   / version:patch  (namespaced, no space)
 #
-# Only the namespaced `version:` labels are release-significant. Bare
-# `major`/`minor`/`patch` are intentionally NOT honored — they are deprecated
-# in the Blessed-CICD label standard (its setup-labels template doesn't create
-# them and its docs mark them for deletion), so treating them as release
-# instructions here would resurrect a label family the portfolio is retiring.
+# Both forms are accepted on purpose. Blessed-CICD's live PR-label validator
+# (templates/.github/workflows/pr-labels.yml) requires a BARE major/minor/patch
+# label and nags contributors to add one — so honoring bare labels makes the
+# label the portfolio already mandates actually drive the release bump (closing
+# the "false affordance" gap its docs/labels.md describes). The namespaced
+# `version:` form is also accepted for forward-compatibility in case the
+# standard later disambiguates these from priority/size labels. See
+# https://github.com/JonathanPorta/blessed-cicd (label docs vs. validator
+# inconsistency tracked upstream).
 #
 # Fallback (no version label) scans $BUMP_COMMITS:
 #   BREAKING or major:  → major
@@ -43,11 +47,11 @@ labels_lc="$(printf '%s' "$LABELS" | tr '[:upper:]' '[:lower:]')"
 
 # Here-strings (not pipes) keep `grep -q`'s early exit from racing a writer
 # into a SIGPIPE that pipefail would surface as a spurious failure.
-if grep -qE '^[[:space:]]*version:[[:space:]]*major[[:space:]]*$' <<< "$labels_lc"; then
+if grep -qE '^[[:space:]]*(version:[[:space:]]*major|major)[[:space:]]*$' <<< "$labels_lc"; then
   echo major
-elif grep -qE '^[[:space:]]*version:[[:space:]]*minor[[:space:]]*$' <<< "$labels_lc"; then
+elif grep -qE '^[[:space:]]*(version:[[:space:]]*minor|minor)[[:space:]]*$' <<< "$labels_lc"; then
   echo minor
-elif grep -qE '^[[:space:]]*version:[[:space:]]*patch[[:space:]]*$' <<< "$labels_lc"; then
+elif grep -qE '^[[:space:]]*(version:[[:space:]]*patch|patch)[[:space:]]*$' <<< "$labels_lc"; then
   echo patch
 else
   commits="${BUMP_COMMITS:-}"
