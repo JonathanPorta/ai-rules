@@ -19,9 +19,15 @@ set -euo pipefail
 #
 # Label precedence (highest wins): major > minor > patch. Recognized label
 # forms are case-insensitive and match a whole line:
-#   version: major / version:major / major
-#   version: minor / version:minor / minor
-#   version: patch / version:patch / patch
+#   version: major / version:major
+#   version: minor / version:minor
+#   version: patch / version:patch
+#
+# Only the namespaced `version:` labels are release-significant. Bare
+# `major`/`minor`/`patch` are intentionally NOT honored — they are deprecated
+# in the Blessed-CICD label standard (its setup-labels template doesn't create
+# them and its docs mark them for deletion), so treating them as release
+# instructions here would resurrect a label family the portfolio is retiring.
 #
 # Fallback (no version label) scans $BUMP_COMMITS:
 #   BREAKING or major:  → major
@@ -37,11 +43,11 @@ labels_lc="$(printf '%s' "$LABELS" | tr '[:upper:]' '[:lower:]')"
 
 # Here-strings (not pipes) keep `grep -q`'s early exit from racing a writer
 # into a SIGPIPE that pipefail would surface as a spurious failure.
-if grep -qE '^[[:space:]]*(version:[[:space:]]*major|major)[[:space:]]*$' <<< "$labels_lc"; then
+if grep -qE '^[[:space:]]*version:[[:space:]]*major[[:space:]]*$' <<< "$labels_lc"; then
   echo major
-elif grep -qE '^[[:space:]]*(version:[[:space:]]*minor|minor)[[:space:]]*$' <<< "$labels_lc"; then
+elif grep -qE '^[[:space:]]*version:[[:space:]]*minor[[:space:]]*$' <<< "$labels_lc"; then
   echo minor
-elif grep -qE '^[[:space:]]*(version:[[:space:]]*patch|patch)[[:space:]]*$' <<< "$labels_lc"; then
+elif grep -qE '^[[:space:]]*version:[[:space:]]*patch[[:space:]]*$' <<< "$labels_lc"; then
   echo patch
 else
   commits="${BUMP_COMMITS:-}"

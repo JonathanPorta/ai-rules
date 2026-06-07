@@ -52,18 +52,20 @@ jobs:
           assert minor "$(printf '' | BUMP_COMMITS='feat: add x' $db)" "feat fallback"
           assert major "$(printf '' | BUMP_COMMITS='BREAKING change' $db)" "BREAKING fallback"
           assert patch "$(printf '' | BUMP_COMMITS='fix: y' $db)" "fix fallback"
-          # Version labels (both 'version: X' and bare 'X' forms) win
+          # Only namespaced 'version:' labels are release-significant
           assert major "$(printf 'version: major\n' | $db)" "version: major"
-          assert major "$(printf 'major\n' | $db)" "bare major"
+          assert major "$(printf 'version:major\n' | $db)" "version:major (no space)"
           assert minor "$(printf 'version: minor\n' | $db)" "version: minor"
-          assert minor "$(printf 'minor\n' | $db)" "bare minor"
           assert patch "$(printf 'version: patch\n' | $db)" "version: patch"
-          assert patch "$(printf 'patch\n' | $db)" "bare patch"
-          # Precedence: highest label wins regardless of order
-          assert minor "$(printf 'patch\nminor\n' | $db)" "minor beats patch"
-          assert major "$(printf 'minor\nmajor\n' | $db)" "major beats minor"
-          # A label overrides the commit fallback
-          assert patch "$(printf 'patch\n' | BUMP_COMMITS='feat: x' $db)" "label beats commit"
+          # Bare major/minor/patch are deprecated and NOT honored → fallback
+          assert patch "$(printf 'major\n' | $db)" "bare major ignored"
+          assert patch "$(printf 'minor\n' | $db)" "bare minor ignored"
+          assert minor "$(printf 'major\n' | BUMP_COMMITS='feat: x' $db)" "bare major falls back to commit"
+          # Precedence: highest 'version:' label wins regardless of order
+          assert minor "$(printf 'version: patch\nversion: minor\n' | $db)" "minor beats patch"
+          assert major "$(printf 'version: minor\nversion: major\n' | $db)" "major beats minor"
+          # A version label overrides the commit fallback
+          assert patch "$(printf 'version: patch\n' | BUMP_COMMITS='feat: x' $db)" "label beats commit"
           # Unrelated labels are ignored → fallback runs
           assert minor "$(printf 'enhancement\nbug\n' | BUMP_COMMITS='feat: x' $db)" "unrelated labels ignored"
 

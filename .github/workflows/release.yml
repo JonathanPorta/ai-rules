@@ -10,6 +10,9 @@ concurrency:
 
 permissions:
   contents: write
+  # Needed to read the labels of PRs associated with each commit since the
+  # last tag (commit→pulls API) when deciding the version bump.
+  pull-requests: read
 
 jobs:
   release:
@@ -64,12 +67,19 @@ jobs:
             RANGE_COMMITS=$(git rev-list "${LATEST_TAG}..HEAD")
           fi
 
+          # Don't silently swallow API failures: a permission/auth/rate-limit
+          # error would otherwise drop every label and quietly fall back to the
+          # commit-prefix path with no signal. On failure, emit a workflow
+          # warning and keep going (the fallback is still a sensible default).
           LABELS=""
           for sha in $RANGE_COMMITS; do
-            pr_labels=$(gh api "repos/${{ github.repository }}/commits/${sha}/pulls" \
-              --jq '.[].labels[].name' 2>/dev/null || true)
-            if [[ -n "$pr_labels" ]]; then
-              LABELS="${LABELS}${pr_labels}"$'\n'
+            if pr_labels=$(gh api "repos/${{ github.repository }}/commits/${sha}/pulls" \
+                 --jq '.[].labels[].name' 2>&1); then
+              if [[ -n "$pr_labels" ]]; then
+                LABELS="${LABELS}${pr_labels}"$'\n'
+              fi
+            else
+              echo "::warning::Could not read PR labels for ${sha}; using commit-prefix fallback for it. (${pr_labels})"
             fi
           done
 
