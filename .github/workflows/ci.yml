@@ -236,3 +236,101 @@ jobs:
           echo "$trace"
           final_owner=$(echo "$trace" | grep "^\+ OWNER=" | tail -1)
           [[ "$final_owner" == *"OWNER=JonathanPorta"* ]] || { echo "FAIL: SSH alias leaked: $final_owner"; exit 1; }
+
+      - name: install.sh smoke test (--check --help and unknown flag)
+        run: |
+          set -euo pipefail
+          # --check --help: help wins, exits 0
+          help_out=$(./install.sh --check --help)
+          echo "$help_out" | grep -q "Usage:"
+          echo "$help_out" | grep -q -- "--check"
+          # --help works outside any git repo (preflight bypassed)
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          out2=$(cd "$tmp" && bash "$GITHUB_WORKSPACE/install.sh" --help)
+          echo "$out2" | grep -q "Usage:"
+          # Unknown flag: non-zero exit with usage
+          if ./install.sh --bogus >/dev/null 2>&1; then
+            echo "FAIL: --bogus should have exited non-zero"; exit 1
+          fi
+
+      - name: install.sh smoke test (--check status states are read-only)
+        run: |
+          set -euo pipefail
+          SH="$GITHUB_WORKSPACE/install.sh"
+          # AI_RULES_LATEST_TAG pins "latest" so assertions don't depend on the
+          # live release. --check must never mutate the tree (assert clean after).
+          mkrepo() {
+            local d; d="$(mktemp -d)"
+            git -C "$d" init -q
+            git -C "$d" config user.email c@e.com
+            git -C "$d" config user.name C
+            echo "$d"
+          }
+
+          # not installed
+          d="$(mkrepo)"
+          out=$(cd "$d" && AI_RULES_LATEST_TAG=v9.9.9 bash "$SH" --check)
+          echo "$out" | grep -q "upstream:           github.com/JonathanPorta/ai-rules"
+          echo "$out" | grep -q "installed at:       not installed"
+          echo "$out" | grep -q "latest available:   v9.9.9"
+          echo "$out" | grep -q "status:             not installed"
+          [[ ! -e "$d/.ai-rules" ]] || { echo "FAIL: --check created .ai-rules"; exit 1; }
+          [[ -z "$(git -C "$d" status --porcelain)" ]] || { echo "FAIL: not clean (not installed)"; exit 1; }
+          rm -rf "$d"
+
+          # up to date (installed tag == latest)
+          d="$(mkrepo)"
+          mkdir -p "$d/.ai-rules"
+          printf 'origin=https://github.com/JonathanPorta/ai-rules\ntag=v9.9.9\n' > "$d/.ai-rules/.version"
+          git -C "$d" add -A && git -C "$d" commit -q -m setup
+          out=$(cd "$d" && AI_RULES_LATEST_TAG=v9.9.9 bash "$SH" --check)
+          echo "$out" | grep -q "installed at:       .ai-rules/ (v9.9.9)"
+          echo "$out" | grep -q "origin matches:     yes"
+          echo "$out" | grep -q "status:             up to date"
+          echo "$out" | grep -q "to update:          N/A"
+          [[ -z "$(git -C "$d" status --porcelain)" ]] || { echo "FAIL: not clean (up to date)"; exit 1; }
+          rm -rf "$d"
+
+          # update available (installed tag < latest)
+          d="$(mkrepo)"
+          mkdir -p "$d/.ai-rules"
+          printf 'origin=https://github.com/JonathanPorta/ai-rules\ntag=v0.1.0\n' > "$d/.ai-rules/.version"
+          git -C "$d" add -A && git -C "$d" commit -q -m setup
+          out=$(cd "$d" && AI_RULES_LATEST_TAG=v9.9.9 bash "$SH" --check)
+          echo "$out" | grep -q "status:             update available"
+          echo "$out" | grep -q "to update:          .ai-rules/install.sh"
+          [[ -z "$(git -C "$d" status --porcelain)" ]] || { echo "FAIL: not clean (update available)"; exit 1; }
+          rm -rf "$d"
+
+          # origin mismatch (independent of latest)
+          d="$(mkrepo)"
+          mkdir -p "$d/.ai-rules"
+          printf 'origin=https://github.com/someone/else\ntag=v0.1.0\n' > "$d/.ai-rules/.version"
+          git -C "$d" add -A && git -C "$d" commit -q -m setup
+          out=$(cd "$d" && AI_RULES_LATEST_TAG=v9.9.9 bash "$SH" --check)
+          echo "$out" | grep -q "origin matches:     no"
+          echo "$out" | grep -q "status:             origin mismatch"
+          rm -rf "$d"
+
+          # unmanaged (.ai-rules without .version)
+          d="$(mkrepo)"
+          mkdir -p "$d/.ai-rules"
+          echo x > "$d/.ai-rules/foo"
+          git -C "$d" add -A && git -C "$d" commit -q -m setup
+          out=$(cd "$d" && AI_RULES_LATEST_TAG=v9.9.9 bash "$SH" --check)
+          echo "$out" | grep -q "status:             unmanaged"
+          [[ -z "$(git -C "$d" status --porcelain)" ]] || { echo "FAIL: not clean (unmanaged)"; exit 1; }
+          rm -rf "$d"
+
+      - name: install.sh smoke test (--check offline reports unknown)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          # Point the API at a closed port so the fetch fails fast → unknown.
+          out=$(AI_RULES_HOST=localhost:1 bash "$GITHUB_WORKSPACE/install.sh" --check)
+          echo "$out" | grep -q "latest available:   unknown"
+          echo "$out" | grep -q "status:             unknown"

@@ -112,6 +112,141 @@ ensure_ai_local_gitignore() {
   info "Added .ai-local/ to .gitignore (private styleguide overlays)."
 }
 
+usage() {
+  local exit_code="${1:-0}"
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Install or update ai-rules in the current repository via git subtree.
+With no options: install ai-rules if ${PREFIX}/ is absent, otherwise update
+it to the latest release.
+
+Options:
+  --check      Print a read-only status report — upstream identity, the
+               installed version, and drift versus the latest release — then
+               exit. Makes no git or filesystem changes and works whether or
+               not ai-rules is installed.
+  -h, --help   Show this help message and exit.
+
+Identity is resolved from these environment variables, falling back to the
+values stamped into this script:
+  AI_RULES_HOST    (default: ${HOST})
+  AI_RULES_OWNER   (default: ${OWNER})
+  AI_RULES_REPO    (default: ${REPO_NAME})
+
+Examples:
+  $(basename "$0")            # install or update to the latest release
+  $(basename "$0") --check    # report status without changing anything
+EOF
+  exit "$exit_code"
+}
+
+# Fetch the latest release tag from the GitHub API. Prints the tag to stdout,
+# or nothing if the API is unreachable / has no releases. Never fails — the
+# caller decides what an empty result means (the normal path errors; --check
+# reports "unknown"). This is the single network call install.sh makes.
+fetch_latest_tag() {
+  # Escape hatch: pin the "latest" tag without a network call. Useful in
+  # air-gapped environments and for deterministic tests of --check.
+  if [[ -n "${AI_RULES_LATEST_TAG:-}" ]]; then
+    printf '%s' "$AI_RULES_LATEST_TAG"
+    return 0
+  fi
+  local tag=""
+  if command -v curl &>/dev/null; then
+    tag=$(curl -fsSL --max-time 10 "$REPO_API" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//') || true
+  elif command -v wget &>/dev/null; then
+    tag=$(wget -qO- --timeout=10 "$REPO_API" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//') || true
+  fi
+  printf '%s' "$tag"
+  return 0
+}
+
+# Read-only status report. No git mutations, no filesystem writes; the only
+# side effect is the single latest-release API fetch. Always exits 0 — drift
+# is communicated in the report body, not the exit code.
+run_check() {
+  local installed_tag="" installed_origin="" latest status to_update origin_matches
+
+  latest="$(fetch_latest_tag)"
+
+  echo "ai-rules status:"
+  printf '  %-19s %s\n' "upstream:" "${HOST}/${OWNER}/${REPO_NAME}"
+
+  if [[ ! -d "$PREFIX" ]]; then
+    printf '  %-19s %s\n' "installed at:" "not installed"
+    printf '  %-19s %s\n' "origin matches:" "N/A"
+    if [[ -n "$latest" ]]; then
+      printf '  %-19s %s\n' "latest available:" "$latest"
+      printf '  %-19s %s\n' "status:" "not installed"
+    else
+      printf '  %-19s %s\n' "latest available:" "unknown"
+      printf '  %-19s %s\n' "status:" "unknown"
+    fi
+    printf '  %-19s %s\n' "to update:" "N/A"
+    return 0
+  fi
+
+  if [[ ! -f "$VERSION_FILE" ]]; then
+    # Directory exists but no .version — not installed by ai-rules.
+    printf '  %-19s %s\n' "installed at:" "${PREFIX}/ (no .version)"
+    printf '  %-19s %s\n' "origin matches:" "N/A"
+    printf '  %-19s %s\n' "latest available:" "${latest:-unknown}"
+    printf '  %-19s %s\n' "status:" "unmanaged"
+    printf '  %-19s %s\n' "to update:" "N/A"
+    return 0
+  fi
+
+  installed_origin=$(grep '^origin=' "$VERSION_FILE" 2>/dev/null | cut -d= -f2- || true)
+  installed_tag=$(grep '^tag=' "$VERSION_FILE" 2>/dev/null | cut -d= -f2- || true)
+
+  printf '  %-19s %s\n' "installed at:" "${PREFIX}/ (${installed_tag:-unknown})"
+
+  if [[ "$installed_origin" == "$ORIGIN_URL" ]]; then
+    origin_matches="yes"
+  else
+    origin_matches="no"
+  fi
+  printf '  %-19s %s\n' "origin matches:" "$origin_matches"
+  printf '  %-19s %s\n' "latest available:" "${latest:-unknown}"
+
+  if [[ "$origin_matches" == "no" ]]; then
+    status="origin mismatch"
+    to_update="N/A"
+  elif [[ -z "$latest" ]]; then
+    status="unknown"
+    to_update="N/A"
+  elif [[ "$installed_tag" == "$latest" ]]; then
+    status="up to date"
+    to_update="N/A"
+  else
+    status="update available"
+    to_update="${PREFIX}/install.sh"
+  fi
+  printf '  %-19s %s\n' "status:" "$status"
+  printf '  %-19s %s\n' "to update:" "$to_update"
+  return 0
+}
+
+# -------------------------------------------------------------------
+# Argument parsing
+# -------------------------------------------------------------------
+# Placed before preflight so --check and --help work without (and without
+# mutating) a git repository.
+CHECK=false
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --check) CHECK=true; shift ;;
+    -h|--help) usage 0 ;;
+    *) error "Unknown option: $1"; usage 1 ;;
+  esac
+done
+
+if [[ "$CHECK" == true ]]; then
+  run_check
+  exit 0
+fi
+
 # -------------------------------------------------------------------
 # Preflight checks
 # -------------------------------------------------------------------
@@ -165,14 +300,12 @@ fi
 
 info "Fetching latest release..."
 
-if command -v curl &>/dev/null; then
-  LATEST_TAG=$(curl -fsSL "$REPO_API" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
-elif command -v wget &>/dev/null; then
-  LATEST_TAG=$(wget -qO- "$REPO_API" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
-else
+if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
   error "Neither curl nor wget found. Install one and try again."
   exit 1
 fi
+
+LATEST_TAG="$(fetch_latest_tag)"
 
 if [[ -z "$LATEST_TAG" ]]; then
   error "No releases found. The repository may not have any tagged releases yet."
