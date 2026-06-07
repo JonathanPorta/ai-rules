@@ -330,4 +330,25 @@ jobs:
           if "$tmp/.ai-rules/setup.sh" --check --platforms claude >/dev/null 2>&1; then
             echo "FAIL: missing template should exit non-zero"; exit 1
           fi
-          "$tmp/.ai-rules/setup.sh" --check --platforms claude 2>&1 | grep -q "template missing from install"
+          # Capture first, then grep — piping a non-zero command into `grep -q`
+          # would fail the step under `set -o pipefail` even on a match.
+          err_out=$("$tmp/.ai-rules/setup.sh" --check --platforms claude 2>&1 || true)
+          echo "$err_out" | grep -q "template missing from install"
+
+      - name: setup.sh smoke test (--check internal error on unreadable stub)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'chmod -R u+rwX "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          # A regular stub we cannot read is an internal error, NOT a NOT OURS
+          # finding — the checker must not guess at content it can't read.
+          cp "$tmp/.ai-rules/templates/platform-stubs/claude.md" CLAUDE.md
+          chmod 000 CLAUDE.md
+          if "$tmp/.ai-rules/setup.sh" --check --platforms claude >/dev/null 2>&1; then
+            echo "FAIL: unreadable stub should exit non-zero"; exit 1
+          fi
+          err_out=$("$tmp/.ai-rules/setup.sh" --check --platforms claude 2>&1 || true)
+          echo "$err_out" | grep -q "stub not readable"

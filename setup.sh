@@ -125,8 +125,16 @@ lookup_platform() {
 # any drift above the marker → modified.
 check_platform() {
   local abs_path="$1" template_file="$2"
+  CHK_ERROR=""
 
+  # Internal errors (return 1): the template must ship with the install and be
+  # readable. These are environment problems, not stub-drift findings.
   if [[ ! -f "$template_file" ]]; then
+    CHK_ERROR="template missing from install: $template_file"
+    return 1
+  fi
+  if [[ ! -r "$template_file" ]]; then
+    CHK_ERROR="template not readable: $template_file"
     return 1
   fi
 
@@ -142,7 +150,14 @@ check_platform() {
     return 0
   fi
 
-  if ! grep -qF -- "$REFERENCE_MARKER" "$abs_path"; then
+  # A regular file we cannot read is an internal error, not a NOT OURS finding
+  # — we genuinely can't classify it.
+  if [[ ! -r "$abs_path" ]]; then
+    CHK_ERROR="stub not readable: $abs_path"
+    return 1
+  fi
+
+  if ! grep -qF -- "$REFERENCE_MARKER" "$abs_path" 2>/dev/null; then
     CHK_STATUS="not-ours"
     return 0
   fi
@@ -152,9 +167,10 @@ check_platform() {
     return 0
   fi
 
-  # Find the marker line in the template; fall back to the whole template if
-  # (unexpectedly) absent. Capture grep's output before slicing to avoid a
-  # SIGPIPE-under-pipefail race with head.
+  # Find the marker's line number in the template (templates ship with exactly
+  # one such line). The `|| true` keeps a no-match — or head closing the pipe
+  # early — from tripping set -e/pipefail; fall back to the whole template if
+  # the marker is (unexpectedly) absent.
   local marker_ln n
   marker_ln=$(grep -n -- 'below this line' "$template_file" 2>/dev/null | head -1 || true)
   n="${marker_ln%%:*}"
@@ -170,7 +186,7 @@ check_platform() {
 
 # Read-only validation report over $PLATFORMS. Prints a per-platform line and
 # a summary; makes no filesystem changes. Returns 1 only on an internal error
-# (a template missing from the install).
+# (a template or stub that is missing from / unreadable in the install).
 run_check() {
   local version platform label abs_path template
   local n_checked=0 n_match=0 n_ext=0 n_mod=0 n_miss=0 n_notours=0
@@ -199,7 +215,7 @@ run_check() {
     template="$STUBS_DIR/$PL_TEMPLATE"
 
     if ! check_platform "$abs_path" "$template"; then
-      echo "  [error]  $platform — template missing from install: $template" >&2
+      echo "  [error]  $platform — ${CHK_ERROR}" >&2
       internal_error=1
       continue
     fi
