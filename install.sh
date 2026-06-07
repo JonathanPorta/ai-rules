@@ -144,7 +144,8 @@ EOF
 # Fetch the latest release tag from the GitHub API. Prints the tag to stdout,
 # or nothing if the API is unreachable / has no releases. Never fails — the
 # caller decides what an empty result means (the normal path errors; --check
-# reports "unknown"). This is the single network call install.sh makes.
+# reports "unknown"). This is the only GitHub-API call install.sh makes (the
+# subtree add/pull on the install path also talks to the remote).
 fetch_latest_tag() {
   # Escape hatch: pin the "latest" tag without a network call. Useful in
   # air-gapped environments and for deterministic tests of --check.
@@ -243,6 +244,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$CHECK" == true ]]; then
+  # Resolve to the repo root so .ai-rules/ is found regardless of the current
+  # directory (this cd is read-only — it doesn't affect the parent shell). When
+  # not inside a git repo, stay put so the "not installed" report still works.
+  _root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [[ -n "$_root" ]] && cd "$_root"
   run_check
   exit 0
 fi
@@ -300,7 +306,11 @@ fi
 
 info "Fetching latest release..."
 
-if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
+# curl/wget are only needed for the live API lookup. When AI_RULES_LATEST_TAG
+# pins the tag, fetch_latest_tag never touches the network, so don't require
+# them (keeps the air-gapped escape hatch usable).
+if [[ -z "${AI_RULES_LATEST_TAG:-}" ]] \
+   && ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
   error "Neither curl nor wget found. Install one and try again."
   exit 1
 fi

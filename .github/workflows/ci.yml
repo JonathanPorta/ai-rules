@@ -311,6 +311,7 @@ jobs:
           out=$(cd "$d" && AI_RULES_LATEST_TAG=v9.9.9 bash "$SH" --check)
           echo "$out" | grep -q "origin matches:     no"
           echo "$out" | grep -q "status:             origin mismatch"
+          [[ -z "$(git -C "$d" status --porcelain)" ]] || { echo "FAIL: not clean (origin mismatch)"; exit 1; }
           rm -rf "$d"
 
           # unmanaged (.ai-rules without .version)
@@ -334,3 +335,21 @@ jobs:
           out=$(AI_RULES_HOST=localhost:1 bash "$GITHUB_WORKSPACE/install.sh" --check)
           echo "$out" | grep -q "latest available:   unknown"
           echo "$out" | grep -q "status:             unknown"
+
+      - name: install.sh smoke test (--check works from a subdirectory)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          git config user.email c@e.com
+          git config user.name C
+          mkdir -p .ai-rules deep/nested/dir
+          printf 'origin=https://github.com/JonathanPorta/ai-rules\ntag=v0.1.0\n' > .ai-rules/.version
+          git add -A && git commit -q -m setup
+          # Run --check from a nested subdirectory: it must resolve the repo
+          # root and find .ai-rules/, not report "not installed".
+          out=$(cd deep/nested/dir && AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --check)
+          echo "$out" | grep -q "installed at:       .ai-rules/ (v0.1.0)"
+          echo "$out" | grep -q "status:             update available"
