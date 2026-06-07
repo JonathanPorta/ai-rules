@@ -29,9 +29,9 @@ set -euo pipefail
 # label the portfolio already mandates actually drive the release bump (closing
 # the "false affordance" gap its docs/labels.md describes). The namespaced
 # `version:` form is also accepted for forward-compatibility in case the
-# standard later disambiguates these from priority/size labels. See
-# https://github.com/JonathanPorta/blessed-cicd (label docs vs. validator
-# inconsistency tracked upstream).
+# standard later disambiguates these from priority/size labels. The upstream
+# label-docs-vs-validator inconsistency is tracked at
+# https://github.com/JonathanPorta/blessed-cicd/issues/68.
 #
 # Fallback (no version label) scans $BUMP_COMMITS:
 #   BREAKING or major:  → major
