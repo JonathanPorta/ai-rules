@@ -56,6 +56,12 @@ Options:
                        Use 'all' for every supported platform, or run --list
                        to see the full set. Defaults to: ${DEFAULT_PLATFORMS}.
   --list               List supported platforms and exit.
+  --check              Validate existing stubs against the templates shipped
+                       with this ai-rules version, without writing anything.
+                       Reports per platform: matches template / EXTENDED /
+                       MODIFIED / missing / NOT OURS. With no --platforms,
+                       --check inspects ALL supported platforms (not the
+                       ${DEFAULT_PLATFORMS} default used by a normal run).
   --dry-run            Show what would happen without writing files.
   --force              Overwrite existing stubs unconditionally — skips the
                        reference-marker check and the YAML-frontmatter
@@ -69,6 +75,8 @@ Examples:
   $(basename "$0") --platforms all
   $(basename "$0") --platforms cursor --force        # rewrite Cursor stub
   $(basename "$0") --list
+  $(basename "$0") --check                           # validate all stubs
+  $(basename "$0") --check --platforms cursor        # validate Cursor only
 EOF
   exit "$exit_code"
 }
@@ -106,6 +114,114 @@ lookup_platform() {
   return 1
 }
 
+# Classify a single stub against its template. Sets CHK_STATUS to one of:
+#   matches | extended | modified | missing | not-ours
+# Returns 0 normally; returns 1 only on an internal error (template missing
+# from the install) so the caller can surface a non-zero exit.
+#
+# extended vs modified hinges on the "… below this line" marker in the
+# template: the stub must match the template byte-for-byte up to and including
+# that marker. Identical above the marker with extra content below → extended;
+# any drift above the marker → modified.
+check_platform() {
+  local abs_path="$1" template_file="$2"
+
+  if [[ ! -f "$template_file" ]]; then
+    return 1
+  fi
+
+  if [[ ! -e "$abs_path" && ! -L "$abs_path" ]]; then
+    CHK_STATUS="missing"
+    return 0
+  fi
+
+  # A non-regular file (directory, symlink to dir, etc.) at the stub path is
+  # not one of our stubs.
+  if [[ ! -f "$abs_path" ]]; then
+    CHK_STATUS="not-ours"
+    return 0
+  fi
+
+  if ! grep -qF -- "$REFERENCE_MARKER" "$abs_path"; then
+    CHK_STATUS="not-ours"
+    return 0
+  fi
+
+  if cmp -s "$template_file" "$abs_path"; then
+    CHK_STATUS="matches"
+    return 0
+  fi
+
+  # Find the marker line in the template; fall back to the whole template if
+  # (unexpectedly) absent. Capture grep's output before slicing to avoid a
+  # SIGPIPE-under-pipefail race with head.
+  local marker_ln n
+  marker_ln=$(grep -n -- 'below this line' "$template_file" 2>/dev/null | head -1 || true)
+  n="${marker_ln%%:*}"
+  [[ "$n" =~ ^[0-9]+$ ]] || n=$(wc -l < "$template_file")
+
+  if diff -q <(head -n "$n" "$template_file") <(head -n "$n" "$abs_path") >/dev/null 2>&1; then
+    CHK_STATUS="extended"
+  else
+    CHK_STATUS="modified"
+  fi
+  return 0
+}
+
+# Read-only validation report over $PLATFORMS. Prints a per-platform line and
+# a summary; makes no filesystem changes. Returns 1 only on an internal error
+# (a template missing from the install).
+run_check() {
+  local version platform label abs_path template
+  local n_checked=0 n_match=0 n_ext=0 n_mod=0 n_miss=0 n_notours=0
+  local internal_error=0
+
+  version="unknown"
+  if [[ -f "$SCRIPT_DIR/.version" ]]; then
+    version=$(grep '^tag=' "$SCRIPT_DIR/.version" 2>/dev/null | cut -d= -f2- || true)
+    [[ -n "$version" ]] || version="unknown"
+  fi
+
+  echo "Checking platform stubs against ai-rules ${version} templates:"
+
+  IFS=',' read -ra PLATFORM_LIST <<< "$PLATFORMS"
+  for platform in "${PLATFORM_LIST[@]}"; do
+    platform="$(echo "$platform" | tr -d '[:space:]')"
+    [[ -z "$platform" ]] && continue
+
+    if ! lookup_platform "$platform"; then
+      echo "Unknown platform: $platform (skipping)" >&2
+      echo "  Run with --list to see supported platforms." >&2
+      continue
+    fi
+
+    abs_path="$PROJECT_ROOT/$PL_PATH"
+    template="$STUBS_DIR/$PL_TEMPLATE"
+
+    if ! check_platform "$abs_path" "$template"; then
+      echo "  [error]  $platform — template missing from install: $template" >&2
+      internal_error=1
+      continue
+    fi
+
+    n_checked=$((n_checked + 1))
+    case "$CHK_STATUS" in
+      matches)  label="present, matches template"; n_match=$((n_match + 1)) ;;
+      extended) label="present, EXTENDED";         n_ext=$((n_ext + 1)) ;;
+      modified) label="present, MODIFIED";         n_mod=$((n_mod + 1)) ;;
+      missing)  label="missing";                   n_miss=$((n_miss + 1)) ;;
+      not-ours) label="present, NOT OURS";         n_notours=$((n_notours + 1)) ;;
+    esac
+    printf "  %-10s %-36s %s\n" "$platform" "$PL_PATH" "$label"
+  done
+
+  echo ""
+  echo "Summary: ${n_checked} checked, ${n_match} in sync, ${n_ext} extended, ${n_mod} modified, ${n_miss} missing, ${n_notours} not-ours."
+
+  [[ "$internal_error" == 0 ]]
+}
+
+CHECK=false
 DRY_RUN=false
 FORCE=false
 PLATFORMS=""
@@ -119,12 +235,31 @@ while [[ $# -gt 0 ]]; do
       fi
       PLATFORMS="$2"; shift 2 ;;
     --list) list_platforms ;;
+    --check) CHECK=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     --force) FORCE=true; shift ;;
     -h|--help) usage 0 ;;
     *) echo "Unknown option: $1" >&2; usage 1 ;;
   esac
 done
+
+# --check is read-only and short-circuits before any of the write paths. With
+# no --platforms it inspects ALL supported platforms (a deliberate divergence
+# from the normal-run ${DEFAULT_PLATFORMS} default). --dry-run is redundant
+# with --check, and --force is meaningless for a read-only report.
+if [[ "$CHECK" == true ]]; then
+  if [[ -z "$PLATFORMS" || "$PLATFORMS" == "all" ]]; then
+    PLATFORMS="$(supported_names)"
+  fi
+  if [[ "$FORCE" == true ]]; then
+    echo "Note: --force has no effect with --check (read-only)." >&2
+  fi
+  if run_check; then
+    exit 0
+  else
+    exit 1
+  fi
+fi
 
 if [[ -z "$PLATFORMS" ]]; then
   PLATFORMS="$DEFAULT_PLATFORMS"
