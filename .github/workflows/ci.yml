@@ -38,6 +38,35 @@ jobs:
       - name: Hidden Unicode scan
         run: python3 scripts/check-hidden-unicode.py
 
+      - name: decide-bump.sh smoke test (label precedence + commit fallback)
+        run: |
+          set -euo pipefail
+          db=./scripts/decide-bump.sh
+          assert() {
+            local expected="$1" actual="$2" desc="$3"
+            [[ "$actual" == "$expected" ]] || { echo "FAIL: $desc (expected $expected, got $actual)"; exit 1; }
+          }
+          # No labels, no commits → patch
+          assert patch "$(printf '' | $db)" "empty"
+          # No version label → fall back to commit prefixes
+          assert minor "$(printf '' | BUMP_COMMITS='feat: add x' $db)" "feat fallback"
+          assert major "$(printf '' | BUMP_COMMITS='BREAKING change' $db)" "BREAKING fallback"
+          assert patch "$(printf '' | BUMP_COMMITS='fix: y' $db)" "fix fallback"
+          # Version labels (both 'version: X' and bare 'X' forms) win
+          assert major "$(printf 'version: major\n' | $db)" "version: major"
+          assert major "$(printf 'major\n' | $db)" "bare major"
+          assert minor "$(printf 'version: minor\n' | $db)" "version: minor"
+          assert minor "$(printf 'minor\n' | $db)" "bare minor"
+          assert patch "$(printf 'version: patch\n' | $db)" "version: patch"
+          assert patch "$(printf 'patch\n' | $db)" "bare patch"
+          # Precedence: highest label wins regardless of order
+          assert minor "$(printf 'patch\nminor\n' | $db)" "minor beats patch"
+          assert major "$(printf 'minor\nmajor\n' | $db)" "major beats minor"
+          # A label overrides the commit fallback
+          assert patch "$(printf 'patch\n' | BUMP_COMMITS='feat: x' $db)" "label beats commit"
+          # Unrelated labels are ignored → fallback runs
+          assert minor "$(printf 'enhancement\nbug\n' | BUMP_COMMITS='feat: x' $db)" "unrelated labels ignored"
+
       - name: claim-fork.sh smoke test (--help)
         run: ./claim-fork.sh --help
 

@@ -26,6 +26,9 @@ jobs:
 
       - name: Determine version bump
         id: version
+        env:
+          # decide-bump.sh reads PR labels via the GitHub API; gh needs a token.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get the latest tag, or default to v0.0.0
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
@@ -49,11 +52,36 @@ jobs:
             exit 0
           fi
 
-          if echo "$COMMITS" | grep -qiE '(BREAKING|major:)'; then
+          # Bump is driven by PR labels (version: major/minor/patch), with the
+          # old commit-prefix scan as a fallback for unlabeled PRs. Collect the
+          # labels of every PR that contributed a commit since the last tag.
+          # Squash-merges (this repo's convention) collapse each PR to a single
+          # commit on main, so we recover the PR via the commit→pulls API; the
+          # same lookup also covers classic merge commits.
+          if [[ "$LATEST_TAG" == "v0.0.0" ]]; then
+            RANGE_COMMITS=$(git rev-list HEAD)
+          else
+            RANGE_COMMITS=$(git rev-list "${LATEST_TAG}..HEAD")
+          fi
+
+          LABELS=""
+          for sha in $RANGE_COMMITS; do
+            pr_labels=$(gh api "repos/${{ github.repository }}/commits/${sha}/pulls" \
+              --jq '.[].labels[].name' 2>/dev/null || true)
+            if [[ -n "$pr_labels" ]]; then
+              LABELS="${LABELS}${pr_labels}"$'\n'
+            fi
+          done
+
+          # decide-bump.sh: labels on stdin, commit fallback via $BUMP_COMMITS.
+          BUMP=$(printf '%s\n' "$LABELS" | BUMP_COMMITS="$COMMITS" scripts/decide-bump.sh)
+          echo "Resolved bump: ${BUMP}"
+
+          if [[ "$BUMP" == "major" ]]; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
             PATCH=0
-          elif echo "$COMMITS" | grep -qiE '(feat:|minor:)'; then
+          elif [[ "$BUMP" == "minor" ]]; then
             MINOR=$((MINOR + 1))
             PATCH=0
           else
