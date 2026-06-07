@@ -249,11 +249,14 @@ jobs:
           trap 'rm -rf "$tmp"' EXIT
           out2=$(cd "$tmp" && bash "$GITHUB_WORKSPACE/install.sh" --help)
           echo "$out2" | grep -q "Usage:"
-          # Unknown flag: non-zero exit with usage
+          # Unknown flag: non-zero exit with usage. Capture first, then grep —
+          # piping a non-zero command into `grep -q` would fail the step under
+          # `set -o pipefail` even on a match.
           if ./install.sh --bogus >/dev/null 2>&1; then
             echo "FAIL: --bogus should have exited non-zero"; exit 1
           fi
-          ./install.sh --bogus 2>&1 | grep -q "Unknown option"
+          bogus_out=$(./install.sh --bogus 2>&1 || true)
+          echo "$bogus_out" | grep -q "Unknown option"
 
       - name: install.sh smoke test (--dry-run from fresh consumer is read-only)
         run: |
@@ -290,11 +293,13 @@ jobs:
           out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
           echo "$out" | grep -q "uncommitted changes"
           echo "$out" | grep -q "\[dry-run\] would run: git subtree add"
-          # No flags: the dirty tree is still fatal (default behavior unchanged)
+          # No flags: the dirty tree is still fatal (default behavior unchanged).
+          # Capture first, then grep (pipefail-safe for a non-zero command).
           if AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" >/dev/null 2>&1; then
             echo "FAIL: no-flag run should error on dirty tree"; exit 1
           fi
-          AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" 2>&1 | grep -q "Commit or stash"
+          dirty_out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" 2>&1 || true)
+          echo "$dirty_out" | grep -q "Commit or stash"
 
       - name: install.sh smoke test (--dry-run on installed consumer reports update/up-to-date)
         run: |
