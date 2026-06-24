@@ -335,3 +335,88 @@ jobs:
           echo "$trace"
           final_owner=$(echo "$trace" | grep "^\+ OWNER=" | tail -1)
           [[ "$final_owner" == *"OWNER=JonathanPorta"* ]] || { echo "FAIL: SSH alias leaked: $final_owner"; exit 1; }
+
+      - name: install.sh smoke test (--help and unknown flag)
+        run: |
+          set -euo pipefail
+          # --help exits 0 and prints usage
+          help_out=$(./install.sh --help)
+          echo "$help_out" | grep -q "Usage:"
+          echo "$help_out" | grep -q -- "--dry-run"
+          # --help works outside any git repo (preflight bypassed)
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          out2=$(cd "$tmp" && bash "$GITHUB_WORKSPACE/install.sh" --help)
+          echo "$out2" | grep -q "Usage:"
+          # Unknown flag: non-zero exit with usage. Capture first, then grep —
+          # piping a non-zero command into `grep -q` would fail the step under
+          # `set -o pipefail` even on a match.
+          if ./install.sh --bogus >/dev/null 2>&1; then
+            echo "FAIL: --bogus should have exited non-zero"; exit 1
+          fi
+          bogus_out=$(./install.sh --bogus 2>&1 || true)
+          echo "$bogus_out" | grep -q "Unknown option"
+
+      - name: install.sh smoke test (--dry-run from fresh consumer is read-only)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          git config user.email c@e.com
+          git config user.name C
+          echo a > f && git add f && git commit -q -m init
+          # AI_RULES_LATEST_TAG pins the release so the preview doesn't need network.
+          out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
+          echo "$out" | grep -q "\[dry-run\] resolved identity:"
+          echo "$out" | grep -q "\[dry-run\] would run: git subtree add"
+          echo "$out" | grep -q "\[dry-run\] would add .ai-local/ to .gitignore"
+          # No mutations
+          [[ ! -e .ai-rules ]] || { echo "FAIL: --dry-run created .ai-rules"; exit 1; }
+          [[ ! -e .gitignore ]] || { echo "FAIL: --dry-run created .gitignore"; exit 1; }
+          [[ -z "$(git status --porcelain)" ]] || { echo "FAIL: tree not clean after --dry-run"; exit 1; }
+
+      - name: install.sh smoke test (--dry-run softens dirty tree; default still errors)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          git config user.email c@e.com
+          git config user.name C
+          echo a > tracked.txt && git add tracked.txt && git commit -q -m init
+          echo b >> tracked.txt
+          # --dry-run: warn about the dirty tree but proceed with the plan
+          out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
+          echo "$out" | grep -q "uncommitted changes"
+          echo "$out" | grep -q "\[dry-run\] would run: git subtree add"
+          # No flags: the dirty tree is still fatal (default behavior unchanged).
+          # Capture first, then grep (pipefail-safe for a non-zero command).
+          if AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" >/dev/null 2>&1; then
+            echo "FAIL: no-flag run should error on dirty tree"; exit 1
+          fi
+          dirty_out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" 2>&1 || true)
+          echo "$dirty_out" | grep -q "Commit or stash"
+
+      - name: install.sh smoke test (--dry-run on installed consumer reports update/up-to-date)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          git config user.email c@e.com
+          git config user.name C
+          mkdir -p .ai-rules
+          printf 'origin=https://github.com/JonathanPorta/ai-rules\ntag=v0.1.0\n' > .ai-rules/.version
+          git add -A && git commit -q -m setup
+          # Older installed tag → would update
+          out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
+          echo "$out" | grep -q "\[dry-run\] would update ai-rules from v0.1.0 to v9.9.9"
+          echo "$out" | grep -q "\[dry-run\] would run: git subtree pull"
+          [[ -z "$(git status --porcelain)" ]] || { echo "FAIL: tree not clean"; exit 1; }
+          # Installed tag == latest → already up to date
+          out=$(AI_RULES_LATEST_TAG=v0.1.0 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
+          echo "$out" | grep -qi "Already up to date"
