@@ -368,10 +368,16 @@ your fork's `AGENTS.md`.
 
 ## Versioning
 
-Releases are cut automatically on merge to `main`:
-- `BREAKING` or `major:` in commit message → major bump
-- `feat:` or `minor:` → minor bump
-- Everything else → patch bump
+Releases are cut automatically on merge to `main`. The version bump is chosen
+from the labels on the PRs merged since the last release tag (highest wins:
+`major` > `minor` > `patch`):
+- `major` (or `version: major`) → major bump
+- `minor` (or `version: minor`) → minor bump
+- `patch` (or `version: patch`) → patch bump
+
+If a PR merges without a version label, the release falls back to scanning
+commit messages: `BREAKING` or `major:` → major, `feat:` or `minor:` → minor,
+everything else → patch.
 
 The `.version` file tracks the installed version and origin, used by the
 installer to detect updates.
