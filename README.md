@@ -155,6 +155,32 @@ tool access:
   run tests independently but cannot modify code — enforcing separation between
   implementation and review.
 
+## Concept Boundaries
+
+To keep the layers crisp as this repo grows, each top-level directory has a
+single job. Future work should respect the boundary rather than turning any
+one of them into a junk drawer.
+
+- **`rules/`** — process law. Always-on instructions every platform stub
+  loads via `AGENTS.md`. Governs how every PRD, task, and implementation
+  happens.
+- **`agents/`** — role definitions. Reference shapes for runners that need
+  a per-role prompt (Copilot custom agents, etc.). Not auto-invoked by
+  this repo; consumers adapt them to their runner.
+- **`skills/`** — triggerable workflow packages. Native-skills platforms
+  (Claude Code, Windsurf, Copilot) auto-discover these by their
+  `description` field; reference-only platforms (Cursor, Amp) point at
+  `.ai-rules/skills/` from their stub. Skills wrap rules with a trigger
+  shape and hard gates; they do not duplicate rule content.
+- **`hooks/`** *(reserved, not used yet)* — event-triggered enforcement
+  that runs in the harness rather than the model.
+- **`mcp/`** *(reserved, not used yet)* — external tool/integration
+  surfaces exposed via Model Context Protocol.
+
+Decision rule: if it is always-on, it is a rule. If it is a role with
+scoped tools, it is an agent. If it is a request-triggered workflow that
+preserves human gates, it is a skill.
+
 ## Structure
 
 ```text
@@ -200,6 +226,10 @@ tool access:
     validator.md                   # Validation plan and test-first agent
     implementer.md                 # Validation-first task implementation agent
     reviewer.md                    # Feature verification and AC review agent
+  skills/
+    prd-authoring/                 # Triggerable PRD-authoring workflow
+      SKILL.md                     # Skill manifest with frontmatter
+      references/                  # Rubrics + worked examples (progressive disclosure)
   scripts/
     tdd-check.sh                   # (Optional) Git timestamp TDD verifier
   templates/
