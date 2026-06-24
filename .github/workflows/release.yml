@@ -10,6 +10,9 @@ concurrency:
 
 permissions:
   contents: write
+  # Needed to read the labels of PRs associated with each commit since the
+  # last tag (commit→pulls API) when deciding the version bump.
+  pull-requests: read
 
 jobs:
   release:
@@ -19,13 +22,16 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine version bump
         id: version
+        env:
+          # decide-bump.sh reads PR labels via the GitHub API; gh needs a token.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get the latest tag, or default to v0.0.0
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
@@ -49,11 +55,43 @@ jobs:
             exit 0
           fi
 
-          if echo "$COMMITS" | grep -qiE '(BREAKING|major:)'; then
+          # Bump is driven by PR labels (version: major/minor/patch), with the
+          # old commit-prefix scan as a fallback for unlabeled PRs. Collect the
+          # labels of every PR that contributed a commit since the last tag.
+          # Squash-merges (this repo's convention) collapse each PR to a single
+          # commit on main, so we recover the PR via the commit→pulls API; the
+          # same lookup also covers classic merge commits.
+          if [[ "$LATEST_TAG" == "v0.0.0" ]]; then
+            RANGE_COMMITS=$(git rev-list HEAD)
+          else
+            RANGE_COMMITS=$(git rev-list "${LATEST_TAG}..HEAD")
+          fi
+
+          # Don't silently swallow API failures: a permission/auth/rate-limit
+          # error would otherwise drop every label and quietly fall back to the
+          # commit-prefix path with no signal. On failure, emit a workflow
+          # warning and keep going (the fallback is still a sensible default).
+          LABELS=""
+          for sha in $RANGE_COMMITS; do
+            if pr_labels=$(gh api "repos/${{ github.repository }}/commits/${sha}/pulls" \
+                 --jq '.[].labels[].name' 2>&1); then
+              if [[ -n "$pr_labels" ]]; then
+                LABELS="${LABELS}${pr_labels}"$'\n'
+              fi
+            else
+              echo "::warning::Could not read PR labels for ${sha}; using commit-prefix fallback for it. (${pr_labels})"
+            fi
+          done
+
+          # decide-bump.sh: labels on stdin, commit fallback via $BUMP_COMMITS.
+          BUMP=$(printf '%s\n' "$LABELS" | BUMP_COMMITS="$COMMITS" scripts/decide-bump.sh)
+          echo "Resolved bump: ${BUMP}"
+
+          if [[ "$BUMP" == "major" ]]; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
             PATCH=0
-          elif echo "$COMMITS" | grep -qiE '(feat:|minor:)'; then
+          elif [[ "$BUMP" == "minor" ]]; then
             MINOR=$((MINOR + 1))
             PATCH=0
           else
