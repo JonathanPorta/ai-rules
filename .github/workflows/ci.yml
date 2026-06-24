@@ -101,6 +101,7 @@ jobs:
           help_out=$(./setup.sh --help)
           echo "$help_out" | grep -q "Usage:"
           echo "$help_out" | grep -q -- "--force"
+          echo "$help_out" | grep -q -- "--check"
           echo "$help_out" | grep -q -- "--no-skills"
           echo "$help_out" | grep -qE "Defaults to:.*claude,copilot"
           list_out=$(./setup.sh --list)
@@ -366,6 +367,121 @@ jobs:
           echo "$trace"
           final_owner=$(echo "$trace" | grep "^\+ OWNER=" | tail -1)
           [[ "$final_owner" == *"OWNER=JonathanPorta"* ]] || { echo "FAIL: SSH alias leaked: $final_owner"; exit 1; }
+
+      - name: setup.sh smoke test (--check help/list interactions)
+        run: |
+          set -euo pipefail
+          # --check --help: help wins (check does not run)
+          out=$(./setup.sh --check --help)
+          echo "$out" | grep -q "Usage:"
+          echo "$out" | grep -q "Checking platform stubs" && { echo "FAIL: check ran under --help"; exit 1; } || true
+          # --check --list: list wins
+          out=$(./setup.sh --check --list)
+          echo "$out" | grep -q "Supported platforms:"
+          echo "$out" | grep -q "Checking platform stubs" && { echo "FAIL: check ran under --list"; exit 1; } || true
+
+      - name: setup.sh smoke test (--check classifies all stub states, read-only)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          ST="$tmp/.ai-rules/templates/platform-stubs"
+          # claude: byte-equal to template → matches
+          cp "$ST/claude.md" CLAUDE.md
+          # copilot: byte-equal → matches
+          mkdir -p .github && cp "$ST/copilot.md" .github/copilot-instructions.md
+          # cursor: template + extra below the marker → EXTENDED
+          mkdir -p .cursor/rules && { cat "$ST/cursor.mdc"; echo "project-specific extra rule"; } > .cursor/rules/ai-rules.mdc
+          # amp: a template line edited above the marker → MODIFIED
+          sed 's/AI Development Rules/EDITED HEADING/' "$ST/amp.md" > AGENTS.md
+          # windsurf: missing (not created)
+
+          # Snapshot the consumer tree (excluding .ai-rules) to prove read-only.
+          snap() { find . -path ./.ai-rules -prune -o -type f -print0 | sort -z | xargs -0 sha1sum; }
+          before="$(snap)"
+
+          out=$("$tmp/.ai-rules/setup.sh" --check)
+          echo "$out"
+          echo "$out" | grep -q "Checking platform stubs against ai-rules"
+          echo "$out" | grep -qE "claude .*matches template"
+          echo "$out" | grep -qE "copilot .*matches template"
+          echo "$out" | grep -qE "cursor .*EXTENDED"
+          echo "$out" | grep -qE "amp .*MODIFIED"
+          echo "$out" | grep -qE "windsurf .*missing"
+          echo "$out" | grep -q "Summary: 5 checked, 2 in sync, 1 extended, 1 modified, 1 missing, 0 not-ours."
+
+          # Exit 0 despite drift
+          "$tmp/.ai-rules/setup.sh" --check >/dev/null
+
+          after="$(snap)"
+          [[ "$before" == "$after" ]] || { echo "FAIL: --check mutated the tree"; exit 1; }
+
+      - name: setup.sh smoke test (--check NOT OURS and subset filtering)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          ST="$tmp/.ai-rules/templates/platform-stubs"
+          # A user file at CLAUDE.md without the reference marker → NOT OURS
+          echo "my own notes, not an ai-rules stub" > CLAUDE.md
+          mkdir -p .cursor/rules && { cat "$ST/cursor.mdc"; echo extra; } > .cursor/rules/ai-rules.mdc
+
+          # No --platforms → checks ALL five (divergence from claude,copilot default)
+          out=$("$tmp/.ai-rules/setup.sh" --check)
+          for p in claude copilot cursor windsurf amp; do
+            echo "$out" | grep -q "$p" || { echo "FAIL: --check omitted $p"; exit 1; }
+          done
+          echo "$out" | grep -qE "claude .*NOT OURS"
+
+          # Subset: --check --platforms cursor checks ONLY cursor
+          out=$("$tmp/.ai-rules/setup.sh" --check --platforms cursor)
+          echo "$out" | grep -qE "cursor .*EXTENDED"
+          for p in claude copilot windsurf amp; do
+            echo "$out" | grep -qE "^  $p " && { echo "FAIL: subset leaked $p"; exit 1; } || true
+          done
+          echo "$out" | grep -q "Summary: 1 checked,"
+
+      - name: setup.sh smoke test (--check internal error on missing template)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          # Remove a template that ships with the install → internal error, non-zero exit
+          rm "$tmp/.ai-rules/templates/platform-stubs/claude.md"
+          if "$tmp/.ai-rules/setup.sh" --check --platforms claude >/dev/null 2>&1; then
+            echo "FAIL: missing template should exit non-zero"; exit 1
+          fi
+          # Capture first, then grep — piping a non-zero command into `grep -q`
+          # would fail the step under `set -o pipefail` even on a match.
+          err_out=$("$tmp/.ai-rules/setup.sh" --check --platforms claude 2>&1 || true)
+          echo "$err_out" | grep -q "template missing from install"
+
+      - name: setup.sh smoke test (--check internal error on unreadable stub)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'chmod -R u+rwX "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          # A regular stub we cannot read is an internal error, NOT a NOT OURS
+          # finding — the checker must not guess at content it can't read.
+          cp "$tmp/.ai-rules/templates/platform-stubs/claude.md" CLAUDE.md
+          chmod 000 CLAUDE.md
+          if "$tmp/.ai-rules/setup.sh" --check --platforms claude >/dev/null 2>&1; then
+            echo "FAIL: unreadable stub should exit non-zero"; exit 1
+          fi
+          err_out=$("$tmp/.ai-rules/setup.sh" --check --platforms claude 2>&1 || true)
+          echo "$err_out" | grep -q "stub not readable"
 
       - name: install.sh smoke test (--help, --check --help, and unknown flag)
         run: |
