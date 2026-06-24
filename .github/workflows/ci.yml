@@ -12,7 +12,7 @@ jobs:
   shell-and-unicode:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Bash syntax check (every .sh file)
         run: |
@@ -70,11 +70,17 @@ jobs:
           help_out=$(./setup.sh --help)
           echo "$help_out" | grep -q "Usage:"
           echo "$help_out" | grep -q -- "--force"
+          echo "$help_out" | grep -q -- "--no-skills"
           echo "$help_out" | grep -qE "Defaults to:.*claude,copilot"
           list_out=$(./setup.sh --list)
           echo "$list_out" | grep -q "claude"
           echo "$list_out" | grep -q "copilot"
           echo "$list_out" | grep -q "cursor"
+          # Skill-wiring annotation per platform
+          echo "$list_out" | grep -q "skills: native at .claude/skills/"
+          echo "$list_out" | grep -q "skills: native at .windsurf/skills/"
+          echo "$list_out" | grep -q "skills: native at .github/skills/"
+          echo "$list_out" | grep -q "skills: reference only"
 
       - name: setup.sh smoke test (no-args defaults to claude,copilot)
         run: |
@@ -145,6 +151,99 @@ jobs:
           echo "$out" | grep -q "not a regular file"
           # Directory was never clobbered
           [[ -d CLAUDE.md ]]
+
+      - name: setup.sh smoke test (native-skills wiring creates symlinks)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          "$tmp/.ai-rules/setup.sh" --platforms all >/dev/null
+          # Three native-skills platforms get a relative symlink per skill
+          for target in .claude/skills/prd-authoring \
+                        .windsurf/skills/prd-authoring \
+                        .github/skills/prd-authoring; do
+            [[ -L "$target" ]] || { echo "FAIL: $target is not a symlink"; exit 1; }
+            link="$(readlink "$target")"
+            [[ "$link" == "../../.ai-rules/skills/prd-authoring" ]] || \
+              { echo "FAIL: $target -> $link (expected ../../.ai-rules/skills/prd-authoring)"; exit 1; }
+            # And resolves to a real directory containing SKILL.md
+            [[ -f "$target/SKILL.md" ]] || { echo "FAIL: $target/SKILL.md not resolvable"; exit 1; }
+          done
+          # Reference-only platforms get no symlinks; their stubs carry the reference text
+          [[ ! -e .cursor/skills ]] || { echo "FAIL: cursor got a skills directory"; exit 1; }
+          grep -qF ".ai-rules/skills/" .cursor/rules/ai-rules.mdc
+          grep -qF ".ai-rules/skills/" AGENTS.md
+
+      - name: setup.sh smoke test (--no-skills suppresses wiring)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          "$tmp/.ai-rules/setup.sh" --platforms claude --no-skills >/dev/null
+          # Stub still created
+          [[ -f CLAUDE.md ]] || { echo "FAIL: CLAUDE.md not created"; exit 1; }
+          # No skills directory created
+          [[ ! -e .claude/skills ]] || { echo "FAIL: --no-skills did not suppress wiring"; exit 1; }
+
+      - name: setup.sh smoke test (skills wiring is idempotent)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          "$tmp/.ai-rules/setup.sh" --platforms claude >/dev/null
+          out=$("$tmp/.ai-rules/setup.sh" --platforms claude 2>&1)
+          echo "$out" | grep -q "symlink already correct"
+          # Symlink unchanged
+          [[ -L .claude/skills/prd-authoring ]]
+          link="$(readlink .claude/skills/prd-authoring)"
+          [[ "$link" == "../../.ai-rules/skills/prd-authoring" ]]
+
+      - name: setup.sh smoke test (skills --dry-run does not write)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          out=$("$tmp/.ai-rules/setup.sh" --platforms claude --dry-run 2>&1)
+          echo "$out" | grep -q "would link .claude/skills/prd-authoring"
+          # Nothing on disk
+          [[ ! -e .claude/skills ]] || { echo "FAIL: dry-run created skills dir"; exit 1; }
+          [[ ! -e CLAUDE.md ]] || { echo "FAIL: dry-run created stub"; exit 1; }
+
+      - name: setup.sh smoke test (foreign content at skill target is guarded)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/.ai-rules"
+          cp -R . "$tmp/.ai-rules/"
+          cd "$tmp"
+          # Pre-populate a real directory at the skill target — user content
+          mkdir -p .claude/skills/prd-authoring
+          echo "user notes" > .claude/skills/prd-authoring/notes.md
+          # Without --force: warn, leave it alone
+          out=$("$tmp/.ai-rules/setup.sh" --platforms claude 2>&1)
+          echo "$out" | grep -q "non-symlink path exists; use --force to replace"
+          [[ -d .claude/skills/prd-authoring && ! -L .claude/skills/prd-authoring ]] || \
+            { echo "FAIL: directory was clobbered without --force"; exit 1; }
+          [[ -f .claude/skills/prd-authoring/notes.md ]] || \
+            { echo "FAIL: user content was lost"; exit 1; }
+          # With --force: replace with the symlink
+          "$tmp/.ai-rules/setup.sh" --platforms claude --force >/dev/null
+          [[ -L .claude/skills/prd-authoring ]] || { echo "FAIL: --force did not convert to symlink"; exit 1; }
+          link="$(readlink .claude/skills/prd-authoring)"
+          [[ "$link" == "../../.ai-rules/skills/prd-authoring" ]]
 
       # install.sh resolves HOST/OWNER/REPO_NAME at the top of the file,
       # before any preflight or network call. Each test below sets up a
@@ -237,22 +336,30 @@ jobs:
           final_owner=$(echo "$trace" | grep "^\+ OWNER=" | tail -1)
           [[ "$final_owner" == *"OWNER=JonathanPorta"* ]] || { echo "FAIL: SSH alias leaked: $final_owner"; exit 1; }
 
-      - name: install.sh smoke test (--check --help and unknown flag)
+      - name: install.sh smoke test (--help, --check --help, and unknown flag)
         run: |
           set -euo pipefail
-          # --check --help: help wins, exits 0
-          help_out=$(./install.sh --check --help)
+          # --help exits 0 and prints usage (lists both flags)
+          help_out=$(./install.sh --help)
           echo "$help_out" | grep -q "Usage:"
           echo "$help_out" | grep -q -- "--check"
+          echo "$help_out" | grep -q -- "--dry-run"
+          # --check --help: help wins, exits 0
+          chelp_out=$(./install.sh --check --help)
+          echo "$chelp_out" | grep -q "Usage:"
           # --help works outside any git repo (preflight bypassed)
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
           out2=$(cd "$tmp" && bash "$GITHUB_WORKSPACE/install.sh" --help)
           echo "$out2" | grep -q "Usage:"
-          # Unknown flag: non-zero exit with usage
+          # Unknown flag: non-zero exit with usage. Capture first, then grep —
+          # piping a non-zero command into `grep -q` would fail the step under
+          # `set -o pipefail` even on a match.
           if ./install.sh --bogus >/dev/null 2>&1; then
             echo "FAIL: --bogus should have exited non-zero"; exit 1
           fi
+          bogus_out=$(./install.sh --bogus 2>&1 || true)
+          echo "$bogus_out" | grep -q "Unknown option"
 
       - name: install.sh smoke test (--check status states are read-only)
         run: |
@@ -353,3 +460,67 @@ jobs:
           out=$(cd deep/nested/dir && AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --check)
           echo "$out" | grep -q "installed at:       .ai-rules/ (v0.1.0)"
           echo "$out" | grep -q "status:             update available"
+
+      - name: install.sh smoke test (--dry-run from fresh consumer is read-only)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          git config user.email c@e.com
+          git config user.name C
+          echo a > f && git add f && git commit -q -m init
+          # AI_RULES_LATEST_TAG pins the release so the preview doesn't need network.
+          out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
+          echo "$out" | grep -q "\[dry-run\] resolved identity:"
+          echo "$out" | grep -q "\[dry-run\] would run: git subtree add"
+          echo "$out" | grep -q "\[dry-run\] would add .ai-local/ to .gitignore"
+          # No mutations
+          [[ ! -e .ai-rules ]] || { echo "FAIL: --dry-run created .ai-rules"; exit 1; }
+          [[ ! -e .gitignore ]] || { echo "FAIL: --dry-run created .gitignore"; exit 1; }
+          [[ -z "$(git status --porcelain)" ]] || { echo "FAIL: tree not clean after --dry-run"; exit 1; }
+
+      - name: install.sh smoke test (--dry-run softens dirty tree; default still errors)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          git config user.email c@e.com
+          git config user.name C
+          echo a > tracked.txt && git add tracked.txt && git commit -q -m init
+          echo b >> tracked.txt
+          # --dry-run: warn about the dirty tree but proceed with the plan
+          out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
+          echo "$out" | grep -q "uncommitted changes"
+          echo "$out" | grep -q "\[dry-run\] would run: git subtree add"
+          # No flags: the dirty tree is still fatal (default behavior unchanged).
+          # Capture first, then grep (pipefail-safe for a non-zero command).
+          if AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" >/dev/null 2>&1; then
+            echo "FAIL: no-flag run should error on dirty tree"; exit 1
+          fi
+          dirty_out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" 2>&1 || true)
+          echo "$dirty_out" | grep -q "Commit or stash"
+
+      - name: install.sh smoke test (--dry-run on installed consumer reports update/up-to-date)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          cd "$tmp"
+          git init -q
+          git config user.email c@e.com
+          git config user.name C
+          mkdir -p .ai-rules
+          printf 'origin=https://github.com/JonathanPorta/ai-rules\ntag=v0.1.0\n' > .ai-rules/.version
+          git add -A && git commit -q -m setup
+          # Older installed tag → would update
+          out=$(AI_RULES_LATEST_TAG=v9.9.9 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
+          echo "$out" | grep -q "\[dry-run\] would update ai-rules from v0.1.0 to v9.9.9"
+          echo "$out" | grep -q "\[dry-run\] would run: git subtree pull"
+          [[ -z "$(git status --porcelain)" ]] || { echo "FAIL: tree not clean"; exit 1; }
+          # Installed tag == latest → already up to date
+          out=$(AI_RULES_LATEST_TAG=v0.1.0 bash "$GITHUB_WORKSPACE/install.sh" --dry-run 2>&1)
+          echo "$out" | grep -qi "Already up to date"

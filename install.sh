@@ -102,6 +102,10 @@ ensure_ai_local_gitignore() {
   if [[ -f .gitignore ]] && grep -qF "$marker" .gitignore; then
     return 0
   fi
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] would add .ai-local/ to .gitignore (private styleguide overlays)."
+    return 0
+  fi
   {
     if [[ -f .gitignore ]] && [[ -n "$(tail -c 1 .gitignore)" ]]; then
       echo ""
@@ -119,13 +123,17 @@ Usage: $(basename "$0") [OPTIONS]
 
 Install or update ai-rules in the current repository via git subtree.
 With no options: install ai-rules if ${PREFIX}/ is absent, otherwise update
-it to the latest release.
+it to the latest release, then ensure .ai-local/ is gitignored.
 
 Options:
   --check      Print a read-only status report — upstream identity, the
                installed version, and drift versus the latest release — then
                exit. Makes no git or filesystem changes and works whether or
                not ai-rules is installed.
+  --dry-run    Preview the planned action without changing anything. Runs the
+               read-only checks (preflight, latest-release lookup, version
+               comparison) and prints the git subtree command and .gitignore
+               change it would make — but performs neither.
   -h, --help   Show this help message and exit.
 
 Identity is resolved from these environment variables, falling back to the
@@ -135,8 +143,10 @@ values stamped into this script:
   AI_RULES_REPO    (default: ${REPO_NAME})
 
 Examples:
-  $(basename "$0")            # install or update to the latest release
-  $(basename "$0") --check    # report status without changing anything
+  $(basename "$0")                          # install or update to latest
+  $(basename "$0") --check                  # report status without changing anything
+  $(basename "$0") --dry-run                # preview without changing anything
+  curl -fsSL <raw-url>/install.sh | bash -s -- --dry-run
 EOF
   exit "$exit_code"
 }
@@ -233,11 +243,14 @@ run_check() {
 # Argument parsing
 # -------------------------------------------------------------------
 # Placed before preflight so --check and --help work without (and without
-# mutating) a git repository.
+# mutating) a git repository, and so --dry-run can soften the
+# uncommitted-changes preflight below.
 CHECK=false
+DRY_RUN=false
 while [[ $# -gt 0 ]]; do
   case $1 in
     --check) CHECK=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage 0 ;;
     *) error "Unknown option: $1"; usage 1 ;;
   esac
@@ -251,6 +264,10 @@ if [[ "$CHECK" == true ]]; then
   [[ -n "$_root" ]] && cd "$_root"
   run_check
   exit 0
+fi
+
+if [[ "$DRY_RUN" == true ]]; then
+  info "[dry-run] resolved identity: ${HOST}/${OWNER}/${REPO_NAME}"
 fi
 
 # -------------------------------------------------------------------
@@ -296,8 +313,13 @@ if ! git rev-parse HEAD &>/dev/null; then
   exit 1
 fi
 if ! git diff-index --quiet HEAD --; then
-  error "You have uncommitted changes. Commit or stash them before installing."
-  exit 1
+  if [[ "$DRY_RUN" == true ]]; then
+    warn "You have uncommitted changes — a real run would require a clean tree."
+    warn "(--dry-run: previewing anyway; no mutating commands will run.)"
+  else
+    error "You have uncommitted changes. Commit or stash them before installing."
+    exit 1
+  fi
 fi
 
 # -------------------------------------------------------------------
@@ -308,7 +330,8 @@ info "Fetching latest release..."
 
 # curl/wget are only needed for the live API lookup. When AI_RULES_LATEST_TAG
 # pins the tag, fetch_latest_tag never touches the network, so don't require
-# them (keeps the air-gapped escape hatch usable).
+# them (keeps the air-gapped escape hatch usable for deterministic --check /
+# --dry-run runs).
 if [[ -z "${AI_RULES_LATEST_TAG:-}" ]] \
    && ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
   error "Neither curl nor wget found. Install one and try again."
@@ -333,16 +356,24 @@ info "Latest release: ${LATEST_TAG}"
 if [[ ! -d "$PREFIX" ]]; then
   # Fresh install
   info "Installing ai-rules ${LATEST_TAG}..."
-  git subtree add --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] would run: git subtree add --prefix=${PREFIX} ${REPO} ${LATEST_TAG} --squash"
+  else
+    git subtree add --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+  fi
 
   ensure_ai_local_gitignore
 
-  info "Installation complete."
-  info ""
-  info "Next steps:"
-  info "  1. Run: ${PREFIX}/setup.sh --platforms cursor,windsurf,copilot"
-  info "  2. Commit the generated platform stubs"
-  info "  3. Read ${PREFIX}/AGENTS.md to understand the rules"
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] no changes were made."
+  else
+    info "Installation complete."
+    info ""
+    info "Next steps:"
+    info "  1. Run: ${PREFIX}/setup.sh --platforms cursor,windsurf,copilot"
+    info "  2. Commit the generated platform stubs"
+    info "  3. Read ${PREFIX}/AGENTS.md to understand the rules"
+  fi
 
 elif [[ -f "$VERSION_FILE" ]]; then
   # Directory exists — check if it's ours
@@ -366,12 +397,21 @@ elif [[ -f "$VERSION_FILE" ]]; then
     exit 0
   fi
 
-  info "Updating ai-rules from ${INSTALLED_TAG} to ${LATEST_TAG}..."
-  git subtree pull --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] would update ai-rules from ${INSTALLED_TAG} to ${LATEST_TAG}"
+    info "[dry-run] would run: git subtree pull --prefix=${PREFIX} ${REPO} ${LATEST_TAG} --squash"
+  else
+    info "Updating ai-rules from ${INSTALLED_TAG} to ${LATEST_TAG}..."
+    git subtree pull --prefix="$PREFIX" "$REPO" "$LATEST_TAG" --squash
+  fi
 
   ensure_ai_local_gitignore
 
-  info "Update complete: ${INSTALLED_TAG} → ${LATEST_TAG}"
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] no changes were made."
+  else
+    info "Update complete: ${INSTALLED_TAG} → ${LATEST_TAG}"
+  fi
 
 else
   # Directory exists but no .version file — not ours
