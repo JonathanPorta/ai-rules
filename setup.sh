@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# setup.sh — Generate platform-specific stub files that reference .ai-rules/.
+# setup.sh — Generate platform-specific stubs and native integrations that
+# reference the versioned .ai-rules/ subtree.
 #
 # Intended to be run from inside a consumer project's .ai-rules/ subtree:
 #
@@ -13,6 +14,9 @@ set -euo pipefail
 # untouched. If a file exists at the target path without the marker, the
 # stub is prepended — UNLESS the existing file starts with YAML frontmatter,
 # in which case the script warns and skips rather than corrupt the file.
+# Native skills and agents are linked back into the versioned subtree; where
+# agent symlinks are unavailable, setup installs a verified copy whose drift is
+# reported by --check.
 #
 # Platform definitions live in PLATFORMS_TABLE below; stub bodies live in
 # templates/platform-stubs/. To add or modify a platform, edit both.
@@ -57,6 +61,15 @@ SKILLS_TABLE=(
 
 SKILLS_SRC_DIR="$SCRIPT_DIR/skills"
 
+# Native platform-agent wiring. The source remains inside the versioned
+# .ai-rules dependency while the target lives at the repository-level discovery
+# path required by the platform.
+#
+# platform|source_relative_to_ai_rules|target_relative_to_project|relative_link_target
+NATIVE_AGENTS_TABLE=(
+  "copilot|.github/agents/implementer-cloud.agent.md|.github/agents/implementer-cloud.agent.md|../../.ai-rules/.github/agents/implementer-cloud.agent.md"
+)
+
 COUNT_CREATE=0
 COUNT_UPDATE=0
 COUNT_SKIP=0
@@ -64,7 +77,7 @@ COUNT_WARN=0
 
 usage() {
   local exit_code="${1:-0}"
-  cat <<EOF
+  cat <<EOF_USAGE
 Usage: $(basename "$0") [OPTIONS]
 
 Generate platform-specific config stubs that reference ${RULES_REL}/.
@@ -74,17 +87,16 @@ Options:
                        Use 'all' for every supported platform, or run --list
                        to see the full set. Defaults to: ${DEFAULT_PLATFORMS}.
   --list               List supported platforms and exit.
-  --check              Validate existing stubs against the templates shipped
-                       with this ai-rules version, without writing anything.
+  --check              Validate existing stubs and native agent wiring against
+                       this ai-rules version, without writing anything.
                        Reports per platform: matches template / EXTENDED /
                        MODIFIED / missing / NOT OURS. With no --platforms,
                        --check inspects ALL supported platforms (not the
                        ${DEFAULT_PLATFORMS} default used by a normal run).
   --dry-run            Show what would happen without writing files.
-  --force              Overwrite existing stubs unconditionally — skips the
-                       reference-marker check and the YAML-frontmatter
-                       safety check. Use when you know you want to clobber
-                       whatever is at the target path.
+  --force              Overwrite or retarget managed stubs, skill links, and
+                       native agent targets. Use when you intentionally want to
+                       replace a drifted or foreign target.
   --no-skills          Skip per-platform skills wiring (default: enabled
                        for native-skills platforms — Claude Code, Windsurf,
                        and Copilot). Cursor and Amp are reference-only and
@@ -97,15 +109,17 @@ Examples:
   $(basename "$0") --platforms all
   $(basename "$0") --platforms cursor --force        # rewrite Cursor stub
   $(basename "$0") --list
-  $(basename "$0") --check                           # validate all stubs
-  $(basename "$0") --check --platforms cursor        # validate Cursor only
-EOF
+  $(basename "$0") --check                           # validate all integrations
+  $(basename "$0") --check --platforms copilot       # validate Copilot only
+EOF_USAGE
   exit "$exit_code"
 }
 
 list_platforms() {
   echo "Supported platforms:"
   local row name desc skills_label
+  local agent_row agent_platform _source_rel target_rel _link_target
+  local agent_names agent_name
   for row in "${PLATFORMS_TABLE[@]}"; do
     IFS='|' read -r name _ _ desc <<< "$row"
     printf "  %-10s - %s\n" "$name" "$desc"
@@ -116,6 +130,17 @@ list_platforms() {
         skills_label="native at $SK_DIR/"
       fi
       printf "  %-10s   skills: %s\n" "" "$skills_label"
+    fi
+
+    agent_names=""
+    for agent_row in "${NATIVE_AGENTS_TABLE[@]}"; do
+      IFS='|' read -r agent_platform _source_rel target_rel _link_target <<< "$agent_row"
+      [[ "$agent_platform" == "$name" ]] || continue
+      agent_name="$(basename "$target_rel")"
+      agent_names="${agent_names:+$agent_names, }$agent_name"
+    done
+    if [[ -n "$agent_names" ]]; then
+      printf "  %-10s   agents: %s\n" "" "$agent_names"
     fi
   done
   exit 0
@@ -214,13 +239,62 @@ check_platform() {
   return 0
 }
 
+# Classify one native agent target. A relative symlink is preferred; an exact
+# copy is also accepted so setup remains usable on filesystems that reject
+# symlinks. Copies become DRIFT as soon as the versioned source changes.
+check_native_agent() {
+  local source_abs="$1" target_abs="$2" expected_link="$3"
+  local existing
+  AGENT_CHECK_ERROR=""
+
+  if [[ ! -f "$source_abs" ]]; then
+    AGENT_CHECK_ERROR="native agent source missing from install: $source_abs"
+    return 1
+  fi
+  if [[ ! -r "$source_abs" ]]; then
+    AGENT_CHECK_ERROR="native agent source not readable: $source_abs"
+    return 1
+  fi
+
+  if [[ ! -e "$target_abs" && ! -L "$target_abs" ]]; then
+    AGENT_CHECK_STATUS="missing"
+    return 0
+  fi
+
+  if [[ -L "$target_abs" ]]; then
+    existing="$(readlink "$target_abs")"
+    if [[ "$existing" == "$expected_link" && -f "$target_abs" ]]; then
+      AGENT_CHECK_STATUS="linked"
+    else
+      AGENT_CHECK_STATUS="drift"
+    fi
+    return 0
+  fi
+
+  if [[ -f "$target_abs" ]]; then
+    if cmp -s "$source_abs" "$target_abs"; then
+      AGENT_CHECK_STATUS="copied"
+    else
+      AGENT_CHECK_STATUS="drift"
+    fi
+    return 0
+  fi
+
+  AGENT_CHECK_STATUS="not-ours"
+  return 0
+}
+
 # Read-only validation report over $PLATFORMS. Prints a per-platform line and
 # a summary; makes no filesystem changes. Returns 1 only on an internal error
-# (a template or stub that is missing from / unreadable in the install).
+# (a template, stub, or native agent source that is missing/unreadable).
 run_check() {
   local version platform label abs_path template
   local n_checked=0 n_match=0 n_ext=0 n_mod=0 n_miss=0 n_notours=0
   local internal_error=0
+  local agent_row agent_platform source_rel target_rel link_target
+  local source_abs target_abs agent_label
+  local n_agent_checked=0 n_agent_sync=0 n_agent_drift=0
+  local n_agent_missing=0 n_agent_notours=0
 
   version="unknown"
   if [[ -f "$SCRIPT_DIR/.version" ]]; then
@@ -247,22 +321,47 @@ run_check() {
     if ! check_platform "$abs_path" "$template"; then
       echo "  [error]  $platform — ${CHK_ERROR}" >&2
       internal_error=1
-      continue
+    else
+      n_checked=$((n_checked + 1))
+      case "$CHK_STATUS" in
+        matches)  label="present, matches template"; n_match=$((n_match + 1)) ;;
+        extended) label="present, EXTENDED";         n_ext=$((n_ext + 1)) ;;
+        modified) label="present, MODIFIED";         n_mod=$((n_mod + 1)) ;;
+        missing)  label="missing";                   n_miss=$((n_miss + 1)) ;;
+        not-ours) label="present, NOT OURS";         n_notours=$((n_notours + 1)) ;;
+      esac
+      printf "  %-10s %-36s %s\n" "$platform" "$PL_PATH" "$label"
     fi
 
-    n_checked=$((n_checked + 1))
-    case "$CHK_STATUS" in
-      matches)  label="present, matches template"; n_match=$((n_match + 1)) ;;
-      extended) label="present, EXTENDED";         n_ext=$((n_ext + 1)) ;;
-      modified) label="present, MODIFIED";         n_mod=$((n_mod + 1)) ;;
-      missing)  label="missing";                   n_miss=$((n_miss + 1)) ;;
-      not-ours) label="present, NOT OURS";         n_notours=$((n_notours + 1)) ;;
-    esac
-    printf "  %-10s %-36s %s\n" "$platform" "$PL_PATH" "$label"
+    for agent_row in "${NATIVE_AGENTS_TABLE[@]}"; do
+      IFS='|' read -r agent_platform source_rel target_rel link_target <<< "$agent_row"
+      [[ "$agent_platform" == "$platform" ]] || continue
+      source_abs="$SCRIPT_DIR/$source_rel"
+      target_abs="$PROJECT_ROOT/$target_rel"
+
+      if ! check_native_agent "$source_abs" "$target_abs" "$link_target"; then
+        echo "  [error]  $platform agent — ${AGENT_CHECK_ERROR}" >&2
+        internal_error=1
+        continue
+      fi
+
+      n_agent_checked=$((n_agent_checked + 1))
+      case "$AGENT_CHECK_STATUS" in
+        linked)   agent_label="present, linked";           n_agent_sync=$((n_agent_sync + 1)) ;;
+        copied)   agent_label="present, copied (in sync)"; n_agent_sync=$((n_agent_sync + 1)) ;;
+        drift)    agent_label="present, DRIFT";            n_agent_drift=$((n_agent_drift + 1)) ;;
+        missing)  agent_label="missing";                   n_agent_missing=$((n_agent_missing + 1)) ;;
+        not-ours) agent_label="present, NOT OURS";         n_agent_notours=$((n_agent_notours + 1)) ;;
+      esac
+      printf "  %-10s %-36s %s\n" "" "$target_rel" "$agent_label"
+    done
   done
 
   echo ""
   echo "Summary: ${n_checked} checked, ${n_match} in sync, ${n_ext} extended, ${n_mod} modified, ${n_miss} missing, ${n_notours} not-ours."
+  if (( n_agent_checked > 0 )); then
+    echo "Native agents: ${n_agent_checked} checked, ${n_agent_sync} in sync, ${n_agent_drift} drifted, ${n_agent_missing} missing, ${n_agent_notours} not-ours."
+  fi
 
   [[ "$internal_error" == 0 ]]
 }
@@ -549,6 +648,138 @@ wire_skills_for_platform() {
   done
 }
 
+# Prefer a relative symlink for a native agent so updates to the .ai-rules
+# subtree are immediately visible. If the filesystem rejects symlinks, install
+# an exact copy and let --check report future drift.
+install_native_agent_target() {
+  local source_abs="$1" target_link="$2" link_target="$3"
+  AGENT_INSTALL_MODE=""
+
+  if ln -s "$link_target" "$target_link" 2>/dev/null; then
+    AGENT_INSTALL_MODE="link"
+    return 0
+  fi
+
+  rm -f "$target_link" 2>/dev/null || true
+  if cp "$source_abs" "$target_link"; then
+    AGENT_INSTALL_MODE="copy"
+    return 0
+  fi
+
+  return 1
+}
+
+report_native_agent_install() {
+  local action="$1" rel_target="$2" link_target="$3" prefix
+  case "$action" in
+    link)   prefix="  [link]   " ;;
+    update) prefix="  [update] " ;;
+    force)  prefix="  [force]  " ;;
+    *)      prefix="  [$action] " ;;
+  esac
+  if [[ "$AGENT_INSTALL_MODE" == "link" ]]; then
+    echo "${prefix}${rel_target} -> $link_target"
+  else
+    echo "  [copy]   $rel_target — symlink unavailable; installed verified copy"
+    echo "           Run setup.sh --check after ai-rules upgrades to detect drift."
+  fi
+}
+
+# Wire native custom-agent profiles into platform discovery paths. Existing
+# current symlinks and exact fallback copies are idempotent. Drift or foreign
+# content is preserved unless --force explicitly replaces it.
+wire_native_agents_for_platform() {
+  local platform="$1"
+  local row agent_platform source_rel target_rel link_target
+  local source_abs target_abs existing
+
+  for row in "${NATIVE_AGENTS_TABLE[@]}"; do
+    IFS='|' read -r agent_platform source_rel target_rel link_target <<< "$row"
+    [[ "$agent_platform" == "$platform" ]] || continue
+
+    source_abs="$SCRIPT_DIR/$source_rel"
+    target_abs="$PROJECT_ROOT/$target_rel"
+
+    if [[ ! -f "$source_abs" ]]; then
+      echo "  [warn]   $target_rel — native agent source missing: $source_rel" >&2
+      COUNT_WARN=$((COUNT_WARN + 1))
+      continue
+    fi
+
+    if [[ -L "$target_abs" ]]; then
+      existing="$(readlink "$target_abs")"
+      if [[ "$existing" == "$link_target" && -f "$target_abs" ]]; then
+        echo "  [skip]   $target_rel — symlink already correct"
+        COUNT_SKIP=$((COUNT_SKIP + 1))
+        continue
+      fi
+      if [[ "$FORCE" != true ]]; then
+        echo "  [warn]   $target_rel — symlink exists but points to '$existing'; use --force to retarget" >&2
+        COUNT_WARN=$((COUNT_WARN + 1))
+        continue
+      fi
+      if [[ "$DRY_RUN" == true ]]; then
+        echo "  [dry-run] would retarget native agent $target_rel -> $link_target"
+        COUNT_UPDATE=$((COUNT_UPDATE + 1))
+        continue
+      fi
+      rm -f "$target_abs"
+      mkdir -p "$(dirname "$target_abs")"
+      if install_native_agent_target "$source_abs" "$target_abs" "$link_target"; then
+        report_native_agent_install "update" "$target_rel" "$link_target"
+        COUNT_UPDATE=$((COUNT_UPDATE + 1))
+      else
+        echo "  [warn]   $target_rel — failed to install native agent" >&2
+        COUNT_WARN=$((COUNT_WARN + 1))
+      fi
+      continue
+    fi
+
+    if [[ -e "$target_abs" ]]; then
+      if [[ -f "$target_abs" ]] && cmp -s "$source_abs" "$target_abs"; then
+        echo "  [skip]   $target_rel — verified copy is current"
+        COUNT_SKIP=$((COUNT_SKIP + 1))
+        continue
+      fi
+      if [[ "$FORCE" != true ]]; then
+        echo "  [warn]   $target_rel — existing target differs; use --force to replace" >&2
+        COUNT_WARN=$((COUNT_WARN + 1))
+        continue
+      fi
+      if [[ "$DRY_RUN" == true ]]; then
+        echo "  [dry-run] would replace $target_rel with managed native agent"
+        COUNT_UPDATE=$((COUNT_UPDATE + 1))
+        continue
+      fi
+      rm -rf "$target_abs"
+      mkdir -p "$(dirname "$target_abs")"
+      if install_native_agent_target "$source_abs" "$target_abs" "$link_target"; then
+        report_native_agent_install "force" "$target_rel" "$link_target"
+        COUNT_UPDATE=$((COUNT_UPDATE + 1))
+      else
+        echo "  [warn]   $target_rel — failed to install native agent" >&2
+        COUNT_WARN=$((COUNT_WARN + 1))
+      fi
+      continue
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+      echo "  [dry-run] would link native agent $target_rel -> $link_target"
+      COUNT_CREATE=$((COUNT_CREATE + 1))
+      continue
+    fi
+
+    mkdir -p "$(dirname "$target_abs")"
+    if install_native_agent_target "$source_abs" "$target_abs" "$link_target"; then
+      report_native_agent_install "link" "$target_rel" "$link_target"
+      COUNT_CREATE=$((COUNT_CREATE + 1))
+    else
+      echo "  [warn]   $target_rel — failed to install native agent" >&2
+      COUNT_WARN=$((COUNT_WARN + 1))
+    fi
+  done
+}
+
 echo "Setting up ai-rules platform stubs..."
 echo ""
 
@@ -570,6 +801,7 @@ for platform in "${PLATFORM_LIST[@]}"; do
   if [[ "$NO_SKILLS" != true ]] && lookup_skills "$platform"; then
     wire_skills_for_platform "$platform" "$SK_DIR" "$SK_MODE"
   fi
+  wire_native_agents_for_platform "$platform"
   echo ""
 done
 
