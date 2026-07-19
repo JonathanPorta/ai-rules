@@ -381,6 +381,21 @@ lookup_skills() {
   return 1
 }
 
+# Write-mode setup is only valid from the standard consumer installation
+# layout. Without this guard, invoking the canonical repository's root-level
+# setup.sh would treat its parent directory as PROJECT_ROOT and write there.
+validate_consumer_install_root() {
+  local expected="$PROJECT_ROOT/.ai-rules"
+  if [[ "$SCRIPT_DIR" != "$expected" ]]; then
+    echo "Error: setup.sh must be run from a consumer repository's .ai-rules/ directory before it can write files." >&2
+    echo "       Detected script directory: $SCRIPT_DIR" >&2
+    echo "       Expected installation path: $expected" >&2
+    echo "       Install/update ai-rules first, then run .ai-rules/setup.sh from the consumer repository." >&2
+    return 1
+  fi
+  return 0
+}
+
 CHECK=false
 DRY_RUN=false
 FORCE=false
@@ -433,6 +448,8 @@ fi
 if [[ "$PLATFORMS" == "all" ]]; then
   PLATFORMS="$(supported_names)"
 fi
+
+validate_consumer_install_root
 
 if [[ ! -f "$AGENTS_MD" ]]; then
   echo "Warning: $AGENTS_MD not found." >&2
@@ -662,11 +679,15 @@ install_native_agent_target() {
   fi
 
   rm -f "$target_link" 2>/dev/null || true
-  if cp "$source_abs" "$target_link"; then
+  if cp "$source_abs" "$target_link" && cmp -s "$source_abs" "$target_link"; then
     AGENT_INSTALL_MODE="copy"
     return 0
   fi
 
+  # A command can report success while leaving an incomplete or altered file
+  # (for example, an interrupted or wrapper-provided copy). Never retain or
+  # describe that target as verified.
+  rm -f "$target_link" 2>/dev/null || true
   return 1
 }
 
