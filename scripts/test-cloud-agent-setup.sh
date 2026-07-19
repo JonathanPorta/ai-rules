@@ -108,6 +108,26 @@ $SETUP --platforms copilot --force >/dev/null
 }
 [[ "$(readlink "$TARGET_AGENT")" == "$EXPECTED_LINK" ]]
 
+# A directory at the native-agent target may contain user data. Even --force
+# must refuse it rather than recursively deleting it.
+NONREGULAR_CONSUMER="$TMP_DIR/nonregular-consumer"
+copy_repo_without_git "$NONREGULAR_CONSUMER/.ai-rules"
+cd "$NONREGULAR_CONSUMER"
+mkdir -p "$TARGET_AGENT"
+printf 'USER-DATA
+' > "$TARGET_AGENT/USER-DATA"
+nonregular_out="$(.ai-rules/setup.sh --platforms copilot --force --no-skills 2>&1)"
+echo "$nonregular_out" | grep -qF "$TARGET_AGENT — target exists but is not a regular file; refusing to replace."
+[[ -d "$TARGET_AGENT" ]] || {
+  echo "FAIL: --force replaced the non-regular native-agent target" >&2
+  exit 1
+}
+grep -qF 'USER-DATA' "$TARGET_AGENT/USER-DATA" || {
+  echo "FAIL: --force deleted user data inside the native-agent target directory" >&2
+  exit 1
+}
+cd "$CONSUMER"
+
 grep -qF 'managed symlink is dangling' "$SETUP"
 
 # Force a successful no-symlink fallback and verify the diagnostic prints the

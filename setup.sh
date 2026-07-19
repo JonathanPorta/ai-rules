@@ -762,7 +762,15 @@ wire_native_agents_for_platform() {
     fi
 
     if [[ -e "$target_abs" ]]; then
-      if [[ -f "$target_abs" ]] && cmp -s "$source_abs" "$target_abs"; then
+      # Match write_stub's safety boundary: even --force must not recursively
+      # remove directories, FIFOs, sockets, or other unexpected target types.
+      if [[ ! -f "$target_abs" ]]; then
+        echo "  [warn]   $target_rel — target exists but is not a regular file; refusing to replace." >&2
+        echo "           Remove or rename it manually before re-running setup." >&2
+        COUNT_WARN=$((COUNT_WARN + 1))
+        continue
+      fi
+      if cmp -s "$source_abs" "$target_abs"; then
         echo "  [skip]   $target_rel — verified copy is current"
         COUNT_SKIP=$((COUNT_SKIP + 1))
         continue
@@ -777,7 +785,7 @@ wire_native_agents_for_platform() {
         COUNT_UPDATE=$((COUNT_UPDATE + 1))
         continue
       fi
-      rm -rf "$target_abs"
+      rm -f "$target_abs"
       mkdir -p "$(dirname "$target_abs")"
       if install_native_agent_target "$source_abs" "$target_abs" "$link_target"; then
         report_native_agent_install "force" "$target_rel" "$link_target"
