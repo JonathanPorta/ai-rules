@@ -22,7 +22,8 @@ versioned setup path:
 
 That command installs the Copilot instruction stub and skills, then links
 `.github/agents/implementer-cloud.agent.md` to the canonical profile inside the
-`.ai-rules/` subtree. Re-running setup is idempotent, and
+`.ai-rules/` subtree. Do not manually copy the profile; `setup.sh` owns the
+repository-level target and its drift state. Re-running setup is idempotent, and
 `.ai-rules/setup.sh --check --platforms copilot` reports a missing, current, or
 drifted agent target. On filesystems that reject symlinks, setup installs a
 verified copy; `--check` detects when that copy later drifts from the versioned
