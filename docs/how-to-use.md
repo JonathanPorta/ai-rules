@@ -11,7 +11,7 @@
 6. Implement and verify.
 7. Preserve session state as work progresses.
 
-## For issue-assigned GitHub Copilot cloud work
+## For GitHub Copilot cloud work
 
 Install or refresh the repository-native Copilot profile through the normal
 versioned setup path:
