@@ -5,9 +5,25 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+copy_repo_without_git() {
+  local destination="$1"
+  mkdir -p "$destination"
+  tar -C "$REPO_ROOT" --exclude='./.git' --exclude='.git' -cf - . |
+    tar -C "$destination" -xf -
+}
+
+# A normal setup run from the canonical repository root would otherwise treat
+# the repository's parent as PROJECT_ROOT. It must fail before previewing or
+# writing any repository-level integration target.
+guard_log="$TMP_DIR/root-guard.log"
+if (cd "$REPO_ROOT" && ./setup.sh --platforms copilot --dry-run >"$guard_log" 2>&1); then
+  echo "FAIL: setup.sh accepted a write-mode run outside a consumer .ai-rules directory" >&2
+  exit 1
+fi
+grep -qF "must be run from a consumer repository's .ai-rules/ directory" "$guard_log"
+
 CONSUMER="$TMP_DIR/consumer"
-mkdir -p "$CONSUMER/.ai-rules"
-cp -R "$REPO_ROOT/." "$CONSUMER/.ai-rules/"
+copy_repo_without_git "$CONSUMER/.ai-rules"
 cd "$CONSUMER"
 
 SOURCE_AGENT=".ai-rules/.github/agents/implementer-cloud.agent.md"
@@ -92,16 +108,30 @@ $SETUP --platforms copilot --force >/dev/null
 }
 [[ "$(readlink "$TARGET_AGENT")" == "$EXPECTED_LINK" ]]
 
-# Simulate the same managed link text from a nonstandard install location. The
-# link is intentionally dangling, so the warning must describe that state rather
-# than incorrectly claiming it points somewhere else.
-ALT_CONSUMER="$TMP_DIR/alt-consumer"
-mkdir -p "$ALT_CONSUMER/.custom-rules"
-cp -R "$REPO_ROOT/." "$ALT_CONSUMER/.custom-rules/"
-cd "$ALT_CONSUMER"
-.custom-rules/setup.sh --platforms copilot >/dev/null
-broken_out="$(.custom-rules/setup.sh --platforms copilot 2>&1)"
-echo "$broken_out" | grep -qF 'managed symlink is dangling'
+grep -qF 'managed symlink is dangling' "$SETUP"
+
+# Force the no-symlink fallback through a cp command that returns success but
+# writes incorrect bytes. setup must reject and remove that unverified target.
+FALLBACK_CONSUMER="$TMP_DIR/fallback-consumer"
+copy_repo_without_git "$FALLBACK_CONSUMER/.ai-rules"
+mkdir -p "$FALLBACK_CONSUMER/fake-bin"
+cat > "$FALLBACK_CONSUMER/fake-bin/ln" <<'EOF_LN'
+#!/bin/sh
+exit 1
+EOF_LN
+cat > "$FALLBACK_CONSUMER/fake-bin/cp" <<'EOF_CP'
+#!/bin/sh
+printf 'corrupt copy\n' > "$2"
+exit 0
+EOF_CP
+chmod +x "$FALLBACK_CONSUMER/fake-bin/ln" "$FALLBACK_CONSUMER/fake-bin/cp"
+cd "$FALLBACK_CONSUMER"
+fallback_out="$(PATH="$FALLBACK_CONSUMER/fake-bin:$PATH" .ai-rules/setup.sh --platforms copilot --no-skills 2>&1)"
+echo "$fallback_out" | grep -qF "$TARGET_AGENT — failed to install native agent"
+[[ ! -e "$TARGET_AGENT" && ! -L "$TARGET_AGENT" ]] || {
+  echo "FAIL: setup retained an unverified fallback copy" >&2
+  exit 1
+}
 cd "$CONSUMER"
 
 python3 - "$SOURCE_AGENT" .ai-rules/docs/how-to-use.md <<'PY'
@@ -125,6 +155,7 @@ for fragment in required_agent_fragments:
         raise SystemExit(f"FAIL: cloud agent contract missing {fragment!r}")
 
 required_doc_fragments = [
+    "## For GitHub Copilot cloud work",
     ".ai-rules/setup.sh --platforms copilot",
     "Do not manually copy the profile",
     "Issue assignment:",
