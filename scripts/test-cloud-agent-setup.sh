@@ -15,6 +15,10 @@ TARGET_AGENT=".github/agents/implementer-cloud.agent.md"
 EXPECTED_LINK="../../.ai-rules/.github/agents/implementer-cloud.agent.md"
 SETUP=".ai-rules/setup.sh"
 
+help_out="$($SETUP --help)"
+echo "$help_out" | grep -qF 'Native-agent states: linked / copied /'
+echo "$help_out" | grep -qF 'DRIFT / missing / NOT OURS'
+
 first_out="$($SETUP --platforms copilot)"
 echo "$first_out"
 [[ -L "$TARGET_AGENT" ]] || {
@@ -88,6 +92,18 @@ $SETUP --platforms copilot --force >/dev/null
 }
 [[ "$(readlink "$TARGET_AGENT")" == "$EXPECTED_LINK" ]]
 
+# Simulate the same managed link text from a nonstandard install location. The
+# link is intentionally dangling, so the warning must describe that state rather
+# than incorrectly claiming it points somewhere else.
+ALT_CONSUMER="$TMP_DIR/alt-consumer"
+mkdir -p "$ALT_CONSUMER/.custom-rules"
+cp -R "$REPO_ROOT/." "$ALT_CONSUMER/.custom-rules/"
+cd "$ALT_CONSUMER"
+.custom-rules/setup.sh --platforms copilot >/dev/null
+broken_out="$(.custom-rules/setup.sh --platforms copilot 2>&1)"
+echo "$broken_out" | grep -qF 'managed symlink is dangling'
+cd "$CONSUMER"
+
 python3 - "$SOURCE_AGENT" .ai-rules/docs/how-to-use.md <<'PY'
 from pathlib import Path
 import sys
@@ -110,6 +126,7 @@ for fragment in required_agent_fragments:
 
 required_doc_fragments = [
     ".ai-rules/setup.sh --platforms copilot",
+    "Do not manually copy the profile",
     "Issue assignment:",
     "Prompt-started task:",
     "and maintain a draft pull request for this task",
