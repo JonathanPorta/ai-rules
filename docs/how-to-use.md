@@ -11,6 +11,30 @@
 6. Implement and verify.
 7. Preserve session state as work progresses.
 
+## For issue-assigned GitHub Copilot cloud work
+
+Use `.github/agents/implementer-cloud.agent.md` as the repository-native
+profile. In a consumer repository where ai-rules is installed under
+`.ai-rules/`, copy or sync that file to the consumer's top-level
+`.github/agents/` directory so GitHub can discover it. The profile is
+intentionally manual-selection only and targets GitHub Copilot cloud agent.
+
+1. Assign an issue or explicit task whose scope and expected outcome are already
+   clear.
+2. Select `implementer-cloud` when starting the cloud-agent task.
+3. Let the agent choose the lightweight lane only for narrow, unambiguous work
+   without API, schema, dependency, security, architecture, migration, or
+   deployment changes.
+4. Require the full PRD/task/session workflow for larger work. If those approved
+   artifacts do not exist, the cloud agent should leave a draft explanation
+   rather than inventing approval.
+5. Review the draft pull request, validation evidence, and independent reviewer
+   result before accepting or merging it.
+
+The cloud profile may commit to its task branch and maintain a draft pull
+request because that remote mutation is explicitly configured by the workflow.
+It must never merge, release, deploy, publish packages, or mutate production.
+
 ## For design work
 
 1. Read `AGENTS.md`.
