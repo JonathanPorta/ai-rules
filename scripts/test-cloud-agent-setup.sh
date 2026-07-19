@@ -110,6 +110,30 @@ $SETUP --platforms copilot --force >/dev/null
 
 grep -qF 'managed symlink is dangling' "$SETUP"
 
+# Force a successful no-symlink fallback and verify the diagnostic prints the
+# actual invocation path rather than a hardcoded command that may not exist.
+COPY_FALLBACK_CONSUMER="$TMP_DIR/copy-fallback-consumer"
+copy_repo_without_git "$COPY_FALLBACK_CONSUMER/.ai-rules"
+mkdir -p "$COPY_FALLBACK_CONSUMER/fake-bin"
+cat > "$COPY_FALLBACK_CONSUMER/fake-bin/ln" <<'EOF_COPY_LN'
+#!/bin/sh
+exit 1
+EOF_COPY_LN
+chmod +x "$COPY_FALLBACK_CONSUMER/fake-bin/ln"
+cd "$COPY_FALLBACK_CONSUMER"
+copy_fallback_out="$(PATH="$COPY_FALLBACK_CONSUMER/fake-bin:$PATH" .ai-rules/setup.sh --platforms copilot --no-skills 2>&1)"
+echo "$copy_fallback_out" | grep -qF "$TARGET_AGENT — symlink unavailable; installed verified copy"
+echo "$copy_fallback_out" | grep -qF 'Run .ai-rules/setup.sh --check after ai-rules upgrades to detect drift.'
+[[ -f "$TARGET_AGENT" && ! -L "$TARGET_AGENT" ]] || {
+  echo "FAIL: successful fallback did not install a regular-file copy" >&2
+  exit 1
+}
+cmp -s "$SOURCE_AGENT" "$TARGET_AGENT" || {
+  echo "FAIL: successful fallback copy differs from the source profile" >&2
+  exit 1
+}
+cd "$CONSUMER"
+
 # Force the no-symlink fallback through a cp command that returns success but
 # writes incorrect bytes. setup must reject and remove that unverified target.
 FALLBACK_CONSUMER="$TMP_DIR/fallback-consumer"

@@ -703,7 +703,7 @@ report_native_agent_install() {
     echo "${prefix}${rel_target} -> $link_target"
   else
     echo "  [copy]   $rel_target — symlink unavailable; installed verified copy"
-    echo "           Run setup.sh --check after ai-rules upgrades to detect drift."
+    printf '           Run %q --check after ai-rules upgrades to detect drift.\n' "$0"
   fi
 }
 
