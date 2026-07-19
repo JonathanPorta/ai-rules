@@ -1,0 +1,37 @@
+name: Apply PR 40 Setup Fix
+
+on:
+  push:
+    branches: [jp/f/cloud-implementer-agent]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          ref: jp/f/cloud-implementer-agent
+
+      - name: Apply and validate setup diagnostics fix
+        run: |
+          set -euo pipefail
+          python3 scripts/apply-pr40-setup-fix.py
+          bash -n setup.sh scripts/test-cloud-agent-setup.sh
+          bash scripts/test-cloud-agent-setup.sh
+
+      - name: Commit setup.sh
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- setup.sh; then
+            echo "setup.sh already contains the review fix"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add setup.sh
+          git commit -m "fix: clarify cloud setup diagnostics"
+          git push
