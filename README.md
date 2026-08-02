@@ -209,7 +209,7 @@ preserves human gates, it is a skill.
     09-git-and-publication-boundaries.md  # Explicit human authority controls publication
     10-branch-pr-commit-conventions.md    # (Optional) git naming conventions
     11-styleguide-overlays.md             # (Optional) private writing-style overlays
-    12-human-copyable-outputs.md          # (Optional, enabled by default) paste-ready /tmp/ai-* files
+    12-human-copyable-outputs.md          # (Optional, enabled by default) draft-only /tmp/ai-* outputs; authorized publication follows Rule 09
     13-phase-gate-audits.md               # Audit before phase transitions and PR descriptions
     design/
       30-design-principles.md      # Design principles for coherent user-facing work

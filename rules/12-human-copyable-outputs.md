@@ -70,10 +70,10 @@ When asked only to generate or draft a PR description:
 5. Provide a command the human can run to copy it.
 
 When asked to open, create, or update the PR, the request authorizes the
-bounded publication steps defined by
-`rules/09-git-and-publication-boundaries.md`. Keep the description in the
-temporary file when a local filesystem is available, then use it for the
-authorized PR operation.
+bounded publication steps defined by `rules/09-git-and-publication-boundaries.md`,
+including a normal feature-branch push and `gh pr create` / `gh pr edit` (or
+equivalent). Keep the description in the temporary file when a local filesystem
+is available, then use it for the authorized PR operation.
 
 Example:
 
