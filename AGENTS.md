@@ -17,7 +17,7 @@ These rules are mandatory for all feature work. Read all of them before starting
 5. [Task Execution](rules/05-task-execution.md) — How to implement and verify tasks
 6. [Session State](rules/06-session-state.md) — Persisting context across sessions
 7. [Command Surface](rules/07-command-surface.md) — Use Makefile as the canonical command surface
-8. [Git and Publication Boundaries](rules/09-git-and-publication-boundaries.md) — AI prepares; human pushes, opens PRs, releases, deploys
+8. [Git and Publication Boundaries](rules/09-git-and-publication-boundaries.md) — Remote mutation is local-only by default and allowed within explicit human authorization
 9. [Phase-Gate Audits](rules/13-phase-gate-audits.md) — Audit before phase transitions, marking work done, generating PR descriptions
 
 ## Domain Rule Sets
