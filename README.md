@@ -206,10 +206,10 @@ preserves human gates, it is a skill.
     06-session-state.md            # Persist context across sessions
     07-command-surface.md          # Required command and tool invocation boundaries
     08-tdd-enforcement.md          # (Optional) Red-then-green TDD evidence
-    09-git-and-publication-boundaries.md  # AI prepares; human ships
+    09-git-and-publication-boundaries.md  # Explicit human authority controls publication
     10-branch-pr-commit-conventions.md    # (Optional) git naming conventions
     11-styleguide-overlays.md             # (Optional) private writing-style overlays
-    12-human-copyable-outputs.md          # (Optional, enabled by default) paste-ready /tmp/ai-* files
+    12-human-copyable-outputs.md          # (Optional, enabled by default) draft-only /tmp/ai-* outputs; authorized publication follows Rule 09
     13-phase-gate-audits.md               # Audit before phase transitions and PR descriptions
     design/
       30-design-principles.md      # Design principles for coherent user-facing work
@@ -346,7 +346,7 @@ forks can override.
 | [TDD Enforcement](rules/08-tdd-enforcement.md) | Requires red-then-green test evidence | Your team practices TDD and has test infrastructure |
 | [Branch, PR, and Commit Conventions](rules/10-branch-pr-commit-conventions.md) | Defines `{initials}/{type}/slug` branches, `type: Title Cased` PR titles, squash-merge default | You want consistent git naming across repos |
 | [Styleguide Overlays](rules/11-styleguide-overlays.md) | Loads optional private writing-style guidance from `.ai-local/` | You have a private voice or work styleguide and want the agent to apply it to prose |
-| [Human-Copyable Outputs](rules/12-human-copyable-outputs.md) | Writes PR descriptions, Slack posts, etc. to `/tmp/ai-*` files with a clipboard command instead of auto-publishing | You want a tangible draft to review before it lands in GitHub, Slack, or email (enabled by default) |
+| [Human-Copyable Outputs](rules/12-human-copyable-outputs.md) | Writes draft-only PR descriptions, Slack posts, etc. to `/tmp/ai-*` files with a clipboard command; explicitly authorized publication follows Rule 09 | You want a tangible draft to review before it lands in GitHub, Slack, or email (enabled by default) |
 
 Optional rules also come with supporting tooling in `scripts/`:
 - `tdd-check.sh` — compares git timestamps to verify test-before-implementation ordering
