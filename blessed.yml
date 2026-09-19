@@ -1,0 +1,17 @@
+schema: blessed/repo/v1
+
+project: ai-rules
+component: rules
+repo_type: standards-repo
+stage: active
+
+stack:
+  - bash
+  - python
+  - markdown
+  - github-actions
+
+standards: []
+capabilities:
+  - sha-pinning
+
